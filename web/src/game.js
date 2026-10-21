@@ -97,7 +97,7 @@ let camera = mapCam;
 const mats = {
   floor: new THREE.MeshLambertMaterial({ map: gravelTex }),
   wall: new THREE.MeshLambertMaterial({ map: hedgeTex }),
-  path: new THREE.MeshLambertMaterial({ color: 0xffe08a, emissive: 0x7a5a10, transparent: true, opacity: 0.85 }),
+  path: new THREE.MeshLambertMaterial({ color: 0xff4f8b, emissive: 0x7a1038 }),
   start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
   goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
   spot: new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x6b3300 }),
@@ -167,13 +167,24 @@ function buildMazeMesh() {
   star.name = 'goalStar';
   mazeGroup.add(star);
 
+  // Vägen är en sammanhängande linje genom rutornas mitt, med rundade hörn.
   pathGroup = new THREE.Group();
-  const tile = new THREE.BoxGeometry(0.5, 0.03, 0.5);
-  for (const c of maze.solution) {
-    const m = new THREE.Mesh(tile, mats.path);
-    const p = cellPos(c.x, c.y);
-    m.position.set(p.x, 0.02, p.z);
-    pathGroup.add(m);
+  const LINE_W = 0.15;
+  const dot = new THREE.CylinderGeometry(LINE_W / 2, LINE_W / 2, 0.03, 16);
+  const sol = maze.solution;
+  for (let k = 0; k < sol.length; k++) {
+    const a = cellPos(sol[k].x, sol[k].y);
+    const joint = new THREE.Mesh(dot, mats.path);
+    joint.position.set(a.x, 0.03, a.z);
+    pathGroup.add(joint);
+    if (k + 1 < sol.length) {
+      const b = cellPos(sol[k + 1].x, sol[k + 1].y);
+      const horizontal = a.z === b.z;
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? 1 : LINE_W, 0.03, horizontal ? LINE_W : 1), mats.path);
+      seg.position.set((a.x + b.x) / 2, 0.03, (a.z + b.z) / 2);
+      pathGroup.add(seg);
+    }
   }
   mazeGroup.add(pathGroup);
   for (const spot of maze.spots ?? []) {
