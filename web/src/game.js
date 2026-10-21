@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  DELTA, distances, monsterPlan, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
+  DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 
@@ -100,6 +100,7 @@ const mats = {
   path: new THREE.MeshLambertMaterial({ color: 0xffe08a, emissive: 0x7a5a10, transparent: true, opacity: 0.85 }),
   start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
   goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
+  spot: new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x6b3300 }),
 };
 const WALL_H = 1.2;
 const WALL_T = 0.34;
@@ -175,7 +176,40 @@ function buildMazeMesh() {
     pathGroup.add(m);
   }
   mazeGroup.add(pathGroup);
+  for (const spot of maze.spots ?? []) {
+    spot.mesh = makeBarrel();
+    const p = cellPos(spot.x, spot.y);
+    // Tunnan står mot väggen längst in i återvändsgränden.
+    const back = DELTA[OPPOSITE[spot.dir]];
+    spot.mesh.position.set(p.x + back.dx * 0.1, 0, p.z + back.dy * 0.1);
+    mazeGroup.add(spot.mesh);
+    // Orange ring så att gömstället syns tydligt på kartan.
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.03, 28), mats.spot);
+    ring.position.set(p.x, 0.015, p.z);
+    mazeGroup.add(ring);
+  }
   scene.add(mazeGroup);
+}
+
+function makeBarrel() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshLambertMaterial({ color: 0x9a6a3a });
+  const band = new THREE.MeshLambertMaterial({ color: 0x4f3219 });
+  const lid = new THREE.MeshLambertMaterial({ color: 0xc08e58 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.19, 0.6, 18), wood);
+  body.position.y = 0.3;
+  g.add(body);
+  for (const y of [0.15, 0.45]) {
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.215 - (0.3 - y) * 0.05, 0.215 - (0.3 - y) * 0.05, 0.05, 18), band);
+    ring.position.y = y;
+    g.add(ring);
+  }
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.03, 18), lid);
+  top.position.y = 0.61;
+  g.add(top);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData.mats = [wood, band, lid];
+  return g;
 }
 
 function fitMapCamera() {
@@ -288,7 +322,7 @@ const S = {
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
   yaw: 0, camYaw: 0, camVel: 0,
-  kind: 'time', mon: null, difficulty: 0,
+  kind: 'time', mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
   anim: { t: 0, reaction: null, reactionT: 0 },
@@ -300,6 +334,7 @@ function startLevel() {
   const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
   if (dbgSize) { params.width = params.height = Math.max(4, Math.min(40, dbgSize)); }
   maze = generateMaze(params);
+  maze.spots = params.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
   buildMazeMesh();
   // Skuggkameran ska täcka hela labyrinten, även stora banor.
   const reach = Math.max(maze.width, maze.height) / 2 + 3;
@@ -311,6 +346,8 @@ function startLevel() {
   const dbgStudy = Number($('dbg-study').value) || 0;
   const dbgTime = Number($('dbg-time').value) || 1;
   S.kind = params.mode;
+  S.hidden = false;
+  hero.visible = true;
   S.difficulty = params.d;
   monster.visible = false;
   S.mon = null;
@@ -318,7 +355,8 @@ function startLevel() {
     const plan = monsterPlan(maze, params.d, settings.difficulty, dbgTime);
     S.limit = plan.starLimit; // Bara för stjärnorna, ingen tidsgräns.
     S.mon = { plan, delay: plan.delay, awake: false, cell: { ...maze.start }, next: null, t: 0,
-      dist: Infinity, map: null, heroKey: '', yaw: 0 };
+      dist: Infinity, map: null, heroKey: '', yaw: 0,
+      mode: 'chase', lostTimer: 0, target: null, tmap: null };
   } else {
     S.limit = timeLimit(maze, params.d, settings.difficulty, dbgTime);
   }
@@ -356,7 +394,7 @@ function startLevel() {
   $('hud-level').textContent = S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`;
   show($('danger'), false);
   const study = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
-  $('hud-phase').textContent = S.kind === 'monster' ? `${study} – sedan jagar ett monster dig` : study;
+  $('hud-phase').textContent = S.kind === 'monster' ? `${study} – tunnor är gömställen` : study;
   updateHud();
 }
 
@@ -379,7 +417,7 @@ function updateHud() {
   $('hud-wrong').textContent = `✗ ${S.wrongTurns}`;
   let frac;
   if (S.phase === 'study') frac = S.studyLeft / S.studyTotal;
-  else if (S.kind === 'monster') frac = S.mon && S.mon.awake ? Math.min(1, S.mon.dist / 10) : 1;
+  else if (S.kind === 'monster') frac = S.mon && S.mon.awake && S.mon.mode !== 'lost' ? Math.min(1, S.mon.dist / 10) : 1;
   else frac = Math.max(0, S.timeLeft / S.limit);
   $('bar-fill').style.width = `${frac * 100}%`;
   $('bar-fill').classList.toggle('low', frac < 0.25);
@@ -401,18 +439,50 @@ function arriveAtNode(animate = true) {
   refreshControls();
 }
 
+function spotHere() {
+  return (maze.spots ?? []).find((sp) => sp.x === S.node.x && sp.y === S.node.y && !sp.used);
+}
+
 function refreshControls() {
   const rels = availableRel();
-  for (const btn of document.querySelectorAll('#controls button')) {
+  for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
     const rel = btn.dataset.rel;
-    btn.disabled = S.phase !== 'play' || S.run !== null || !(rel in rels);
+    btn.disabled = S.phase !== 'play' || S.run !== null || S.hidden || !(rel in rels);
   }
+  const idle = S.phase === 'play' && S.run === null;
+  show($('hide'), idle && !S.hidden && !!spotHere());
+  show($('unhide'), idle && S.hidden);
   const waiting = S.phase === 'play' && S.run === null;
-  show($('compass'), waiting);
+  show($('compass'), waiting && !S.hidden);
+}
+
+function hide() {
+  const spot = spotHere();
+  if (S.phase !== 'play' || S.run || S.hidden || !spot) return;
+  spot.used = true;
+  for (const m of spot.mesh.userData.mats) m.color.set(0x8a8f8c);
+  S.hidden = true;
+  hero.visible = false;
+  const m = S.mon;
+  if (m && m.awake && m.dist > 3) {
+    // Monstret såg inte var du tog vägen och går och letar.
+    m.mode = 'lost';
+    m.lostTimer = { easy: 10, medium: 8, hard: 6 }[settings.difficulty] ?? 8;
+    m.next = null;
+    m.tmap = null;
+  }
+  refreshControls();
+}
+
+function unhide() {
+  if (!S.hidden) return;
+  S.hidden = false;
+  hero.visible = true;
+  refreshControls();
 }
 
 function choose(rel) {
-  if (S.phase !== 'play' || S.run) return;
+  if (S.phase !== 'play' || S.run || S.hidden) return;
   const rels = availableRel();
   if (!(rel in rels)) return;
   const dir = rels[rel];
@@ -459,6 +529,16 @@ function stepRun(dt) {
 }
 
 // ---------- Monster ----------
+function cellKey(c) { return `${c.x},${c.y}`; }
+
+function pickWanderTarget(m) {
+  const far = [...distances(maze, m.cell)].filter(([, d]) => d >= 5);
+  const pick = far.length ? far[Math.floor(Math.random() * far.length)][0] : cellKey(m.cell);
+  const [x, y] = pick.split(',').map(Number);
+  m.target = { x, y };
+  m.tmap = distances(maze, m.target);
+}
+
 function updateMonster(dt) {
   const m = S.mon;
   if (!m || S.phase !== 'play') return;
@@ -469,8 +549,8 @@ function updateMonster(dt) {
     m.awake = true;
     monster.visible = true;
     monster.position.copy(cellPos(m.cell.x, m.cell.y));
-    $('hud-phase').textContent = 'Monstret jagar dig!';
     show($('danger'));
+    if (S.hidden) { m.mode = 'lost'; m.lostTimer = 8; }
   }
   // Håll koll på var spelaren är och hur långt monstret har dit.
   const hx = Math.round(hero.position.x + maze.width / 2 - 0.5);
@@ -480,11 +560,26 @@ function updateMonster(dt) {
     m.heroKey = heroKey;
     m.map = distances(maze, { x: hx, y: hy });
   }
-  m.dist = m.map.get(`${m.cell.x},${m.cell.y}`) ?? Infinity;
+  m.dist = m.map.get(cellKey(m.cell)) ?? Infinity;
 
+  if (m.mode === 'lost') {
+    m.lostTimer -= dt;
+    if (m.lostTimer <= 0) { m.mode = 'chase'; m.next = null; m.tmap = null; }
+  }
+  const lost = m.mode === 'lost';
+  $('hud-phase').textContent = S.hidden
+    ? (lost ? 'Du är gömd. Monstret letar…' : 'Du är gömd, men monstret kommer!')
+    : (lost ? 'Monstret har tappat bort dig. Spring!' : 'Monstret jagar dig!');
+
+  let steer = m.map;
+  if (lost) {
+    if (!m.tmap || (!m.next && m.cell.x === m.target.x && m.cell.y === m.target.y)) pickWanderTarget(m);
+    steer = m.tmap;
+  }
   if (!m.next) {
+    const here = steer.get(cellKey(m.cell));
     const d = openDirs(maze, m.cell.x, m.cell.y).find((dir) =>
-      m.map.get(`${m.cell.x + DELTA[dir].dx},${m.cell.y + DELTA[dir].dy}`) === m.dist - 1);
+      steer.get(`${m.cell.x + DELTA[dir].dx},${m.cell.y + DELTA[dir].dy}`) === here - 1);
     if (d) {
       m.next = { x: m.cell.x + DELTA[d].dx, y: m.cell.y + DELTA[d].dy };
       m.t = 0;
@@ -500,7 +595,8 @@ function updateMonster(dt) {
   }
   const dx = monster.position.x - hero.position.x;
   const dz = monster.position.z - hero.position.z;
-  if (Math.hypot(dx, dz) < 0.55) finish(false, 'monster');
+  const reach = S.hidden ? (lost ? 0 : 1.2) : 0.55;
+  if (reach && Math.hypot(dx, dz) < reach) finish(false, 'monster');
 }
 
 function animateMonster(dt) {
@@ -510,7 +606,7 @@ function animateMonster(dt) {
   monster.rotation.y = lerpAngle(monster.rotation.y, S.mon.yaw, Math.min(1, dt * 10));
   monster.scale.set(1 + Math.sin(t * 9) * 0.03, 1 - Math.sin(t * 9) * 0.03, 1);
   // Röd kant på skärmen när monstret är nära.
-  $('danger').style.opacity = S.phase === 'play' ? Math.max(0, Math.min(0.7, (6 - S.mon.dist) / 6)) : 0;
+  $('danger').style.opacity = S.phase === 'play' ? S.mon.mode === 'lost' ? 0 : Math.max(0, Math.min(0.7, (6 - S.mon.dist) / 6)) : 0;
 }
 
 // ---------- Reaktioner ----------
@@ -598,6 +694,8 @@ function finish(win, reason = 'time') {
   show($('compass'), false);
   show($('danger'), false);
   show($('rear'), false);
+  S.hidden = false;
+  hero.visible = true;
   const used = S.elapsed;
   const key = `${settings.mode}:${settings.difficulty}:${settings.level}`;
 
@@ -737,17 +835,20 @@ $('reset-save').onclick = () => {
   save.stars = {}; save.lives = MAX_LIVES; writeSave(); refreshMenu();
 };
 
-for (const btn of document.querySelectorAll('#controls button')) {
+for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
   btn.addEventListener('click', () => choose(btn.dataset.rel));
 }
+$('hide').onclick = hide;
+$('unhide').onclick = unhide;
 window.addEventListener('keydown', (e) => {
   const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'forward', ArrowDown: 'back' };
   if (map[e.key]) { e.preventDefault(); choose(map[e.key]); }
   if (e.key === 'Enter' && S.phase === 'study') beginPlay();
+  if (e.key === 'h') (S.hidden ? unhide : hide)();
 });
 
 // Test- och felsökningskrok
-window.__game = { S, settings, startLevel, beginPlay, choose, get maze() { return maze; } };
+window.__game = { S, hero, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 refreshMenu();

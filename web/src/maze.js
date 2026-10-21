@@ -237,6 +237,28 @@ export function monsterPlan(maze, d, difficulty = 'medium', tweak = 1) {
   };
 }
 
+/**
+ * Gömställen (tunnor) placeras i några återvändsgränder.
+ * Returnerar { x, y, dir, used } där dir är åt vilket håll gången öppnar sig.
+ */
+export function pickHidingSpots(maze, seed) {
+  const rng = mulberry32(seed + 99);
+  const ends = [];
+  for (let y = 0; y < maze.height; y++) {
+    for (let x = 0; x < maze.width; x++) {
+      const dirs = openDirs(maze, x, y);
+      const isStart = x === maze.start.x && y === maze.start.y;
+      const isGoal = x === maze.goal.x && y === maze.goal.y;
+      if (dirs.length === 1 && !isStart && !isGoal) ends.push({ x, y, dir: dirs[0], used: false });
+    }
+  }
+  for (let i = ends.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [ends[i], ends[j]] = [ends[j], ends[i]];
+  }
+  return ends.slice(0, clamp(Math.round(ends.length * 0.2), 1, 5));
+}
+
 export const STUDY_SECONDS = { easy: 30, medium: 15, hard: 8 };
 
 /** 1-3 stjärnor: klarad, inga felval, snabbt (under 60 % av tiden). */
