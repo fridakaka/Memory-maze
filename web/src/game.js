@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CHARACTERS, makeHero } from './heroes.js';
+import { THEMES, themeFor, getAssets } from './themes.js';
 import {
   DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, pickLandmarks, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
@@ -34,46 +35,10 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const FOG = 0xdfe8e1;
 const LAWN = 0x4f6f3f;
 const scene = new THREE.Scene();
 
-function canvasTex(size, draw, repeat = 1) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  draw(c.getContext('2d'), size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repeat, repeat);
-  t.anisotropy = 4;
-  return t;
-}
-function speckle(ctx, size, base, shades, n, rmin, rmax) {
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < n; i++) {
-    ctx.fillStyle = shades[Math.floor(Math.random() * shades.length)];
-    ctx.globalAlpha = 0.35 + Math.random() * 0.5;
-    ctx.beginPath();
-    ctx.arc(Math.random() * size, Math.random() * size, rmin + Math.random() * (rmax - rmin), 0, TAU);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-const hedgeTex = canvasTex(256, (c, n) =>
-  speckle(c, n, '#2f6a2b', ['#245a22', '#3b8433', '#4d9b3e', '#68b455', '#1d4a1b'], 1400, 2, 7));
-const gravelTex = canvasTex(256, (c, n) =>
-  speckle(c, n, '#b9ad98', ['#9d917d', '#cdc3b0', '#a79b86', '#d8d0bf', '#8a806e'], 1800, 1, 3), 6);
-const skyTex = canvasTex(256, (c, n) => {
-  const g = c.createLinearGradient(0, 0, 0, n);
-  g.addColorStop(0, '#8fbfe6');
-  g.addColorStop(0.55, '#c9e0ee');
-  g.addColorStop(1, '#e8eee6');
-  c.fillStyle = g;
-  c.fillRect(0, 0, n, n);
-});
-skyTex.wrapS = skyTex.wrapT = THREE.ClampToEdgeWrapping;
+let skyTex = null; // sätts av temat
 const lawnColor = new THREE.Color(LAWN);
 scene.background = lawnColor;
 
@@ -96,13 +61,31 @@ const rearCam = new THREE.PerspectiveCamera(62, 1.4, 0.1, 60);
 let camera = mapCam;
 
 const mats = {
-  floor: new THREE.MeshLambertMaterial({ map: gravelTex }),
-  wall: new THREE.MeshLambertMaterial({ map: hedgeTex }),
+  floor: new THREE.MeshLambertMaterial(),
+  wallSide: new THREE.MeshLambertMaterial(),
+  wallTop: new THREE.MeshLambertMaterial(),
   path: new THREE.MeshLambertMaterial({ color: 0xff4f8b, emissive: 0x7a1038 }),
   start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
   goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
   spot: new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x6b3300 }),
 };
+let theme = THEMES[0];
+// Sidor och ovansida på en vägg: [+x, -x, ovan, under, +z, -z]
+let wallMaterials = [mats.wallSide, mats.wallSide, mats.wallTop, mats.wallSide, mats.wallSide, mats.wallSide];
+
+/** Byter utseende på väggar, golv och himmel. */
+function applyTheme(t, size) {
+  theme = t;
+  const a = getAssets(t);
+  mats.wallSide.map = a.side;
+  mats.wallTop.map = a.top;
+  mats.floor.map = a.floor;
+  mats.wallSide.needsUpdate = mats.wallTop.needsUpdate = mats.floor.needsUpdate = true;
+  a.floor.repeat.set(Math.max(2, Math.ceil(size / 2)), Math.max(2, Math.ceil(size / 2)));
+  skyTex = a.sky;
+  lawnColor.set(t.ground);
+}
+
 const WALL_H = 1.2;
 const WALL_T = 0.34;
 
@@ -141,7 +124,7 @@ function buildMazeMesh() {
   const hWall = new THREE.BoxGeometry(1 + WALL_T, WALL_H, WALL_T);
   const vWall = new THREE.BoxGeometry(WALL_T, WALL_H, 1 + WALL_T);
   const addWall = (cx, cz, horizontal) => {
-    const m = new THREE.Mesh(horizontal ? hWall : vWall, mats.wall);
+    const m = new THREE.Mesh(horizontal ? hWall : vWall, wallMaterials);
     m.position.set(cx, WALL_H / 2, cz);
     m.castShadow = true;
     m.receiveShadow = true;
@@ -436,6 +419,7 @@ function startLevel() {
   maze = generateMaze(params);
   maze.spots = params.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
   maze.landmarks = pickLandmarks(maze, params.d, params.seed, maze.spots);
+  applyTheme(themeFor(level), Math.max(maze.width, maze.height));
   buildMazeMesh();
   // Skuggkameran ska täcka hela labyrinten, även stora banor.
   const reach = Math.max(maze.width, maze.height) / 2 + 3;
@@ -505,7 +489,7 @@ function beginPlay() {
   S.phase = 'play';
   pathGroup.visible = false;
   mapIcons.visible = false;
-  scene.fog = new THREE.Fog(FOG, 4.5, 9.5);
+  scene.fog = new THREE.Fog(theme.fog, 4.5, 9.5);
   scene.background = skyTex;
   camera = playCam;
   show($('ready'), false);
@@ -910,16 +894,20 @@ function updateFade(dt) {
     const goal = S.phase === 'play' && wanted.has(m) ? FADE_TO : 1;
     const next = op + Math.sign(goal - op) * Math.min(Math.abs(goal - op), dt * 7);
     if (!m.userData.fadeMat) {
-      m.userData.fadeMat = mats.wall.clone();
-      m.userData.fadeMat.transparent = true;
+      const side = mats.wallSide.clone();
+      const top = mats.wallTop.clone();
+      side.transparent = top.transparent = true;
+      m.userData.fadeMat = [side, side, top, side, side, side];
     }
     if (next >= 0.999 && goal === 1) {
-      m.material = mats.wall;
+      m.material = wallMaterials;
       fading.delete(m);
     } else {
       m.material = m.userData.fadeMat;
-      m.userData.fadeMat.opacity = next;
-      m.userData.fadeMat.depthWrite = next > 0.9;
+      for (const fm of m.userData.fadeMat) {
+        fm.opacity = next;
+        fm.depthWrite = next > 0.9;
+      }
       fading.set(m, next);
     }
   }
@@ -1095,8 +1083,7 @@ function refreshMenu(scroll = false) {
   $('stat-lives').textContent = `❤ ${save.lives}`;
   $('hero-emoji').textContent = heroEmoji();
   const t = levelType(settings.level);
-  const modeText = settings.mode === 'memory' ? 'Memory' : 'Navigator';
-  $('lvl-info').textContent = `Bana ${settings.level} · ${t.label} · ${t.p.width}×${t.p.height} rutor · ${modeText}`;
+  $('lvl-info').textContent = `Bana ${settings.level} · ${themeFor(settings.level).name} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
   $('play').textContent = `Spela bana ${settings.level}`;
   renderMap(scroll);
 }
