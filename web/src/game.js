@@ -869,9 +869,11 @@ function finish(win, reason = 'time') {
   }, win ? 1400 : 1200);
 }
 
-// ---------- Tona ut häckar i vägen ----------
+// ---------- Sänk väggar som skymmer ----------
+// Väggen som är i vägen sänks till knähöjd i stället för att bli genomskinlig,
+// så att den fortfarande ser ut som en vägg men figuren syns över den.
 const sightRay = new THREE.Raycaster();
-const FADE_TO = 0.18;
+const CUT_SCALE = 0.3;
 let fadeTick = 0;
 
 function updateFade(dt) {
@@ -890,24 +892,16 @@ function updateFade(dt) {
   }
   const wanted = S.fadeTargets ?? new Set();
   for (const m of wanted) if (!fading.has(m)) fading.set(m, 1);
-  for (const [m, op] of fading) {
-    const goal = S.phase === 'play' && wanted.has(m) ? FADE_TO : 1;
-    const next = op + Math.sign(goal - op) * Math.min(Math.abs(goal - op), dt * 7);
-    if (!m.userData.fadeMat) {
-      const side = mats.wallSide.clone();
-      const top = mats.wallTop.clone();
-      side.transparent = top.transparent = true;
-      m.userData.fadeMat = [side, side, top, side, side, side];
-    }
-    if (next >= 0.999 && goal === 1) {
-      m.material = wallMaterials;
+  for (const [m, sc] of fading) {
+    const goal = S.phase === 'play' && wanted.has(m) ? CUT_SCALE : 1;
+    const next = sc + Math.sign(goal - sc) * Math.min(Math.abs(goal - sc), dt * 4);
+    m.scale.y = next;
+    m.position.y = (WALL_H * next) / 2;
+    if (goal === 1 && next >= 0.999) {
+      m.scale.y = 1;
+      m.position.y = WALL_H / 2;
       fading.delete(m);
     } else {
-      m.material = m.userData.fadeMat;
-      for (const fm of m.userData.fadeMat) {
-        fm.opacity = next;
-        fm.depthWrite = next > 0.9;
-      }
       fading.set(m, next);
     }
   }
