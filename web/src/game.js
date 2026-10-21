@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.min.js';
-import { CHARACTERS, makeHero, setAccessory } from './heroes.js';
+import { CHARACTERS, makeHero, setAccessory, setHelmet } from './heroes.js';
 import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
@@ -78,10 +78,15 @@ let fogSetting = [0xdfe8e1, 4.5, 9.5]; // färg, nära, långt
 function applyTheme(t, size) {
   theme = t;
   setMonster(MONSTER_BY_THEME[t.id] ?? 'classic');
-  const a = getAssets(t);
+  const a = getAssets(t, window.innerHeight / window.innerWidth);
   mats.wallSide.map = a.side;
   mats.wallTop.map = a.top;
   mats.floor.map = a.floor;
+  // Lampor, skärmar och fönster som lyser (bara i vissa teman)
+  mats.wallSide.emissiveMap = a.glow;
+  mats.wallSide.emissive.setHex(a.glow ? 0xffffff : 0x000000);
+  mats.floor.emissiveMap = a.floorGlow;
+  mats.floor.emissive.setHex(a.floorGlow ? 0xffffff : 0x000000);
   mats.wallSide.needsUpdate = mats.wallTop.needsUpdate = mats.floor.needsUpdate = true;
   a.floor.repeat.set(Math.max(2, Math.ceil(size / 2)), Math.max(2, Math.ceil(size / 2)));
   skyTex = a.sky;
@@ -445,6 +450,7 @@ function setHero(id) {
   scene.remove(old);
   scene.add(hero);
   setAccessory(hero, weather.id);
+  setHelmet(hero, theme.id === 'space');
   attachFlash(weather.id === 'night');
   save.hero = id;
   writeSave();
@@ -520,7 +526,7 @@ function clearFx() {
 function makeFx(kind) {
   clearFx();
   if (!kind) return;
-  const n = kind === 'rain' ? 900 : kind === 'snow' ? 550 : kind === 'bubbles' ? 160 : 320;
+  const n = kind === 'rain' ? 900 : kind === 'snow' ? 550 : kind === 'bubbles' ? 160 : kind === 'motes' ? 140 : 320;
   const p = new Float32Array(n * 3);
   const v = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
@@ -530,6 +536,7 @@ function makeFx(kind) {
     if (kind === 'rain') { v[i * 3] = -1.2; v[i * 3 + 1] = -13 - Math.random() * 3; }
     else if (kind === 'snow') { v[i * 3 + 1] = -0.9 - Math.random() * 0.7; }
     else if (kind === 'bubbles') { v[i * 3 + 1] = 0.6 + Math.random() * 0.9; }
+    else if (kind === 'motes') { v[i * 3] = (Math.random() - 0.5) * 0.4; v[i * 3 + 1] = (Math.random() - 0.5) * 0.3; v[i * 3 + 2] = (Math.random() - 0.5) * 0.4; }
     else { v[i * 3] = 5 + Math.random() * 2; v[i * 3 + 1] = -0.2 - Math.random() * 0.3; }
   }
   const geo = new THREE.BufferGeometry();
@@ -543,6 +550,8 @@ function makeFx(kind) {
       ? { map: softDot, size: 0.16, transparent: true, depthWrite: false, color: 0xffffff }
       : kind === 'bubbles'
         ? { map: bubbleTexture, size: 0.2, transparent: true, depthWrite: false }
+        : kind === 'motes'
+          ? { map: softDot, size: 0.09, transparent: true, depthWrite: false, color: 0x9fe8ff, blending: THREE.AdditiveBlending }
         : { map: leafTexture, size: 0.2, transparent: true, depthWrite: false, alphaTest: 0.1 };
     obj = new THREE.Points(geo, new THREE.PointsMaterial(matOptions));
   }
@@ -620,11 +629,12 @@ function applyWeather(w) {
   if (sky) skyTex = sky;
   fogSetting = w.fog ?? [theme.fog, ...(theme.fogRange ?? [4.5, 9.5])];
   sun.intensity = w.sun ?? 2.2;
-  sun.color.setHex(w.sunColor ?? 0xfff1d6);
-  hemi.intensity = w.hemi ?? 1.35;
-  hemi.color.setHex(w.hemiColor ?? 0xe6f0ff);
+  sun.color.setHex(w.sunColor ?? theme.sunColor ?? 0xfff1d6);
+  hemi.intensity = w.hemi ?? theme.hemi ?? 1.35;
+  hemi.color.setHex(w.hemiColor ?? theme.hemiColor ?? 0xe6f0ff);
   makeFx(w.fx ?? theme.fx);
   setAccessory(hero, w.id);
+  setHelmet(hero, theme.id === 'space');
   attachFlash(w.id === 'night');
 }
 

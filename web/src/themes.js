@@ -377,6 +377,215 @@ const metal = (ctx, n) => {
   }
 };
 
+/**
+ * Rymdstationens vägg. Ritas två gånger med samma upplägg: en gång som färg och en
+ * gång som "glöd" (bara det som lyser), så att lampor, skärmar och fönster lyser i mörkret.
+ */
+const spaceWall = (glow) => (ctx, n) => {
+  const r = mulberry32(777);
+  const S = n / 512;
+  const px = (v) => v * S;
+  ctx.save();
+  ctx.scale(S, S);
+  // Botten: bas
+  if (glow) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 512, 512);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, '#3d4860');
+    g.addColorStop(1, '#2a3345');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+    // Paneler med skarvar och skruvar
+    ctx.strokeStyle = '#1b2230';
+    ctx.lineWidth = 3;
+    for (let x = 128; x < 512; x += 128) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke(); }
+    for (let y = 128; y < 512; y += 128) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    for (let x = 0; x < 512; x += 128) for (let y = 0; y < 512; y += 128) ctx.fillRect(x + 3, y + 3, 122, 4);
+    ctx.fillStyle = '#1b2230';
+    for (let x = 0; x < 512; x += 128) for (let y = 0; y < 512; y += 128) {
+      for (const [dx, dy] of [[12, 12], [116, 12], [12, 116], [116, 116]]) { ctx.beginPath(); ctx.arc(x + dx, y + dy, 3.5, 0, TAU); ctx.fill(); }
+    }
+  }
+
+  // Lysande list längst upp och en tunn under mitten
+  const strip = (y, h, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, y, 512, h);
+  };
+  if (glow) { strip(14, 8, '#35e6ff'); strip(262, 4, '#2a9fd0'); }
+  else { strip(10, 16, '#1b2230'); strip(258, 12, '#1b2230'); }
+
+  // Rundt fönster mot rymden: stjärnor och en planet
+  const porthole = (cx, cy, rad, planet) => {
+    if (!glow) {
+      ctx.fillStyle = '#9aa6bb';
+      ctx.beginPath(); ctx.arc(cx, cy, rad + 12, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#5a6578';
+      ctx.beginPath(); ctx.arc(cx, cy, rad + 5, 0, TAU); ctx.fill();
+    }
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, TAU); ctx.clip();
+    ctx.fillStyle = glow ? '#0a1230' : '#02040e';
+    ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.5 + r() * 0.5})`;
+      ctx.beginPath(); ctx.arc(cx - rad + r() * rad * 2, cy - rad + r() * rad * 2, r() * 1.4 + 0.4, 0, TAU); ctx.fill();
+    }
+    if (planet) {
+      const g = ctx.createRadialGradient(cx + rad * 0.3, cy + rad * 0.5, 4, cx + rad * 0.3, cy + rad * 0.5, rad * 0.9);
+      g.addColorStop(0, '#6fd0ff'); g.addColorStop(0.6, '#2a6fd0'); g.addColorStop(1, '#0c2a6a');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx + rad * 0.3, cy + rad * 0.5, rad * 0.8, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(90,200,110,0.8)';
+      ctx.beginPath(); ctx.ellipse(cx + rad * 0.1, cy + rad * 0.3, rad * 0.22, rad * 0.14, 0.6, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + rad * 0.5, cy + rad * 0.7, rad * 0.18, rad * 0.1, -0.4, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  };
+  porthole(112, 150, 56, true);
+  porthole(404, 380, 34, false);
+
+  // Skärm med kurva och staplar
+  const screen = (x, y, w, h) => {
+    if (!glow) {
+      ctx.fillStyle = '#10151f';
+      ctx.fillRect(x - 8, y - 8, w + 16, h + 16);
+      ctx.fillStyle = '#0a0e16';
+      ctx.fillRect(x, y, w, h);
+    } else {
+      ctx.fillStyle = '#04201a';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#5dffb0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let k = 0; k <= 30; k++) {
+        const px2 = x + 8 + (k / 30) * (w - 16);
+        const py = y + h * 0.45 + Math.sin(k * 0.6) * h * 0.22 + Math.sin(k * 1.7) * h * 0.08;
+        if (k) ctx.lineTo(px2, py); else ctx.moveTo(px2, py);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#3fd0ff';
+      for (let k = 0; k < 8; k++) {
+        const bh = 6 + r() * (h * 0.3);
+        ctx.fillRect(x + 10 + k * ((w - 20) / 8), y + h - 8 - bh, (w - 20) / 8 - 5, bh);
+      }
+    }
+  };
+  screen(236, 64, 190, 112);
+
+  // Ventil
+  if (!glow) {
+    ctx.fillStyle = '#10151f';
+    ctx.fillRect(250, 194, 120, 56);
+    ctx.fillStyle = '#566178';
+    for (let k = 0; k < 6; k++) ctx.fillRect(256, 200 + k * 8, 108, 4);
+  }
+
+  // Skylt med text
+  ctx.fillStyle = glow ? '#000' : '#d8dde8';
+  ctx.fillRect(40, 300, 150, 40);
+  ctx.font = 'bold 22px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = glow ? '#ffb347' : '#2b3345';
+  ctx.fillText('AIRLOCK 3', 52, 321);
+  if (!glow) {
+    ctx.fillStyle = '#f2c230';
+    for (let k = 0; k < 9; k++) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(40, 352, 150, 18); ctx.clip();
+      ctx.translate(40 + k * 20, 352);
+      ctx.transform(1, 0, -0.8, 1, 0, 0);
+      ctx.fillRect(0, 0, 10, 18);
+      ctx.restore();
+    }
+  }
+
+  // Rör med fästen
+  if (!glow) {
+    for (const x of [236, 262]) {
+      ctx.fillStyle = '#6b7690';
+      ctx.fillRect(x, 270, 14, 130);
+      ctx.fillStyle = '#9aa6bb';
+      ctx.fillRect(x + 2, 270, 4, 130);
+      ctx.fillStyle = '#2b3345';
+      for (const y of [296, 352]) ctx.fillRect(x - 3, y, 20, 8);
+    }
+  }
+
+  // Varningslampor
+  const lamp = (x, y, color, rad) => {
+    if (!glow) { ctx.fillStyle = '#10151f'; ctx.beginPath(); ctx.arc(x, y, rad + 5, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = glow ? color : '#40495c';
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
+  };
+  lamp(344, 330, '#ff3b3b', 12);
+  lamp(380, 330, '#ffd23f', 12);
+  lamp(416, 330, '#4aff7a', 12);
+  lamp(470, 60, '#35e6ff', 9);
+
+  // Gul och svart varningsrand längst ned
+  if (!glow) {
+    ctx.fillStyle = '#16191f';
+    ctx.fillRect(0, 456, 512, 56);
+    ctx.fillStyle = '#f2c230';
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 462, 512, 44); ctx.clip();
+    for (let x = -60; x < 560; x += 44) {
+      ctx.beginPath();
+      ctx.moveTo(x, 506); ctx.lineTo(x + 22, 506); ctx.lineTo(x + 22 + 44, 462); ctx.lineTo(x + 44, 462);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+  void px;
+};
+
+const spaceTop = (ctx, n) => {
+  ctx.fillStyle = '#7d8aa0';
+  ctx.fillRect(0, 0, n, n);
+  ctx.strokeStyle = '#5c6880';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= n; i += n / 4) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, n); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(n, i); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  for (let k = 0; k < 40; k++) ctx.fillRect(rnd() * n, rnd() * n, 10 + rnd() * 20, 2);
+};
+
+/** Golv i rymdstationen: mörka plåtar med lysande skarvar. */
+const spaceFloor = (glow) => (ctx, n) => {
+  const cells = 4;
+  const s = n / cells;
+  ctx.fillStyle = glow ? '#000' : '#1a2030';
+  ctx.fillRect(0, 0, n, n);
+  for (let y = 0; y < cells; y++) {
+    for (let x = 0; x < cells; x++) {
+      if (!glow) {
+        ctx.fillStyle = (x + y) % 2 ? '#222a3c' : '#1d2434';
+        ctx.fillRect(x * s + 3, y * s + 3, s - 6, s - 6);
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(x * s + 3, y * s + 3, s - 6, 3);
+      } else {
+        ctx.fillStyle = '#2aa8bc';
+        ctx.beginPath(); ctx.arc(x * s + 10, y * s + 10, 2.5, 0, TAU); ctx.fill();
+      }
+    }
+  }
+  if (glow) {
+    ctx.strokeStyle = '#0c4256';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i <= cells; i++) {
+      ctx.beginPath(); ctx.moveTo(i * s, 0); ctx.lineTo(i * s, n); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * s); ctx.lineTo(n, i * s); ctx.stroke();
+    }
+  }
+};
+
 // ---------- Ovansidor av väggar ----------
 const flat = (color, spots) => (ctx, n) => speckle(ctx, n, color, spots, 500, 3, 10);
 
@@ -540,6 +749,42 @@ const flagstone = (ctx, n) => {
   }
 };
 
+const nebulaSky = (ctx, w, h) => {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#02030a');
+  g.addColorStop(1, '#10162e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  // Nebulosa
+  for (const [x, y, rad, c] of [[0.3, 0.35, 0.55, '110,60,200'], [0.75, 0.55, 0.5, '30,120,200'], [0.5, 0.2, 0.4, '200,60,140']]) {
+    const gr = ctx.createRadialGradient(w * x, h * y, 4, w * x, h * y, w * rad);
+    gr.addColorStop(0, `rgba(${c},0.32)`);
+    gr.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, w, h);
+  }
+  for (let i = 0; i < 160; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.65})`;
+    ctx.beginPath();
+    ctx.arc(rnd() * w, rnd() * h * 0.8, rnd() * 1.3 + 0.4, 0, TAU);
+    ctx.fill();
+  }
+  // Planet med ringar uppe till vänster
+  const px = w * 0.2;
+  const py = h * 0.15;
+  const pr = w * 0.15;
+  const pg = ctx.createRadialGradient(px - pr * 0.3, py - pr * 0.3, pr * 0.1, px, py, pr);
+  pg.addColorStop(0, '#ffd9a0'); pg.addColorStop(0.6, '#c9763a'); pg.addColorStop(1, '#4a2210');
+  ctx.fillStyle = pg;
+  ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(240,210,160,0.75)';
+  ctx.lineWidth = pr * 0.14;
+  ctx.beginPath(); ctx.ellipse(px, py, pr * 1.7, pr * 0.42, -0.3, 0, TAU); ctx.stroke();
+  // Liten måne
+  ctx.fillStyle = '#cfd6e6';
+  ctx.beginPath(); ctx.arc(w * 0.8, h * 0.1, w * 0.04, 0, TAU); ctx.fill();
+};
+
 const reefSky = (ctx, w, h) => {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#0a4a78');
@@ -593,7 +838,7 @@ export const THEMES = [
   { id: 'library', noWeather: true, name: 'Bibliotek', side: books, top: flat('#4a2f1b', ['#3b2514', '#5a3b22']), floor: carpet, ground: 0x3d2a1c, fog: 0x6b5038, sky: ['#3a2818', '#5a402a', '#6b5038'] },
   { id: 'candy', noWeather: true, name: 'Godisland', side: candy, top: flat('#ffd1e6', ['#ffc2de', '#ffe0f0']), floor: candyFloor, ground: 0xd98ab0, fog: 0xffd9ec, sky: ['#ff9ed0', '#ffc2e0', '#ffe3f1'] },
   { id: 'reef', noWeather: true, name: 'Korallgrotta', fx: 'bubbles', fogRange: [3.2, 8], side: coral, top: coral, floor: sand, ground: 0x0b3a5c, fog: 0x1f7fa8, skyDraw: reefSky, sky: ['#0a4a78', '#1b86b8', '#4fb0d4'] },
-  { id: 'space', noWeather: true, name: 'Rymdstation', side: metal, top: flat('#7d8aa0', ['#6f7c92', '#8c99ae']), floor: deck, ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: starfield, sky: ['#02030a', '#0a0e20', '#141a33'] },
+  { id: 'space', noWeather: true, name: 'Rymdstation', texSize: 512, fx: 'motes', fogRange: [4, 10], hemi: 1.0, hemiColor: 0x8fb4ff, sunColor: 0xdfe8ff, side: spaceWall(false), glow: spaceWall(true), top: spaceTop, floor: spaceFloor(false), floorGlow: spaceFloor(true), ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: nebulaSky, skyAspect: true, sky: ['#02030a', '#0a0e20', '#141a33'] },
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
 ];
 
@@ -621,14 +866,17 @@ export function themeFor(level) {
 }
 
 /** Skapar texturerna första gången de behövs. */
-export function getAssets(theme) {
+export function getAssets(theme, aspect = 2) {
   if (!theme.assets) {
     const [top, mid, bottom] = theme.sky;
+    const skySize = theme.skyAspect ? [256, Math.round(256 * aspect)] : 256;
     theme.assets = {
       side: canvasTex(theme.texSize ?? 256, theme.side),
       top: canvasTex(256, theme.top),
       floor: canvasTex(256, theme.floor),
-      sky: canvasTex(256, theme.skyDraw ?? sky(top, mid, bottom), { clamp: true }),
+      sky: canvasTex(skySize, theme.skyDraw ?? sky(top, mid, bottom), { clamp: true }),
+      glow: theme.glow ? canvasTex(theme.texSize ?? 256, theme.glow) : null,
+      floorGlow: theme.floorGlow ? canvasTex(256, theme.floorGlow) : null,
     };
   }
   return theme.assets;

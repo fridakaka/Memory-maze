@@ -354,3 +354,76 @@ export function setAccessory(hero, weather) {
     add(hero, tail);
   }
 }
+
+/** Rymdhjälm med glas, krage, antenn och syretank. Sätts på i rymdstationen. */
+export function setHelmet(hero, on) {
+  const ud = hero.userData;
+  ud.undoHelmet?.forEach((f) => f());
+  ud.undoHelmet = [];
+  if (!on) return;
+  const add = (parent, obj) => {
+    parent.add(obj);
+    ud.undoHelmet.push(() => parent.remove(obj));
+    return obj;
+  };
+  const lam = (c, e = 0x000000) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+  const { head, body } = ud;
+
+  // Storlek efter huvudet (djuren har öron som ska rymmas)
+  hero.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(head);
+  const size = box.getSize(new THREE.Vector3());
+  const center = head.worldToLocal(box.getCenter(new THREE.Vector3()));
+  const rad = Math.max(size.x, size.y, size.z) / 2 * 1.1;
+
+  const glass = new THREE.Mesh(
+    new THREE.SphereGeometry(rad, 28, 20),
+    new THREE.MeshPhongMaterial({ color: 0xa8dcff, transparent: true, opacity: 0.2, shininess: 140, specular: 0xffffff, depthWrite: false }));
+  glass.position.copy(center);
+  glass.renderOrder = 6;
+  add(head, glass);
+  // Glans i glaset
+  const shine = new THREE.Mesh(
+    new THREE.SphereGeometry(rad * 0.16, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+  shine.scale.set(1.5, 0.7, 0.3);
+  shine.position.set(center.x - rad * 0.45, center.y + rad * 0.55, center.z + rad * 0.62);
+  shine.rotation.z = 0.6;
+  add(head, shine);
+
+  // Krage med kantlist
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(rad * 0.82, 0.05, 10, 28), lam(0xe8edf5));
+  collar.position.set(center.x, center.y - rad * 0.88, center.z);
+  collar.rotation.x = Math.PI / 2;
+  add(head, collar);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(rad * 0.83, 0.018, 8, 28), lam(0xff7a2a, 0x802800));
+  band.position.set(center.x, center.y - rad * 0.88 + 0.045, center.z);
+  band.rotation.x = Math.PI / 2;
+  add(head, band);
+
+  // Antenn med lampa
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 8), lam(0xcfd6e6));
+  mast.position.set(center.x + rad * 0.5, center.y + rad * 0.95, center.z);
+  add(head, mast);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), lam(0xff3b3b, 0xff2020));
+  bulb.position.set(center.x + rad * 0.5, center.y + rad * 0.95 + 0.09, center.z);
+  add(head, bulb);
+
+  // Syretank på ryggen med slang
+  const tank = new THREE.Group();
+  for (const dx of [-0.07, 0.07]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.34, 14), lam(0xdfe5ef));
+    t.position.set(dx, 0.34, -0.3);
+    tank.add(t);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.05, 12), lam(0xff7a2a));
+    cap.position.set(dx, 0.53, -0.3);
+    tank.add(cap);
+  }
+  const hose = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.014, 6, 16, Math.PI), lam(0x2b2f3a));
+  hose.position.set(0, 0.5, -0.2);
+  hose.rotation.x = Math.PI / 2;
+  tank.add(hose);
+  tank.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+  add(hero, tank);
+  void body;
+}
