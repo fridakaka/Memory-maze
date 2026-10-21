@@ -105,7 +105,11 @@ let walls = []; // { cx, cz, sx, sz } per vägg
 let wallIndex = new Map(); // 'H:x:y' eller 'V:x:y' -> väggens nummer
 let wallSides = null;
 let wallTops = null;
-const cut = new Map(); // väggnummer -> { scale, hold } för väggar som sänks
+const cut = new Map(); // väggnummer -> { alpha, hold, slot } för väggar som är genomskinliga
+let ghostSides = null; // genomskinliga kopior av väggarna som skymmer
+let ghostTops = null;
+let ghostAlpha = null;
+const GHOST_MAX = 96;
 const dummy = new THREE.Object3D();
 
 let sideGeo = null;
@@ -131,11 +135,40 @@ function wallTopGeometry() {
   return topGeo;
 }
 
-function setWallMatrix(i, scaleY) {
+function hideWall(i) {
+  dummy.scale.set(0, 0, 0);
+  dummy.position.set(0, -10, 0);
+  dummy.updateMatrix();
+  wallSides.setMatrixAt(i, dummy.matrix);
+  wallTops.setMatrixAt(i, dummy.matrix);
+}
+
+/** Material som kan ha olika genomskinlighet per instans. */
+function ghostMaterial(base) {
+  const m = base.clone();
+  m.transparent = true;
+  m.depthWrite = false;
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float instAlpha;\nvarying float vInstAlpha;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInstAlpha = instAlpha;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vInstAlpha;')
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vInstAlpha );');
+  };
+  return m;
+}
+
+/** Räknar ut en väggs matris i `dummy`. */
+function computeWallMatrix(i, scaleY = 1) {
   const w = walls[i];
   dummy.position.set(w.cx, (WALL_H * scaleY) / 2, w.cz);
   dummy.scale.set(w.sx, WALL_H * scaleY, w.sz);
   dummy.updateMatrix();
+}
+
+function setWallMatrix(i, scaleY) {
+  computeWallMatrix(i, scaleY);
   wallSides.setMatrixAt(i, dummy.matrix);
   wallTops.setMatrixAt(i, dummy.matrix);
 }
@@ -182,6 +215,20 @@ function buildMazeMesh() {
   wallTops.receiveShadow = true;
   wallSides.frustumCulled = wallTops.frustumCulled = false;
   mazeGroup.add(wallSides, wallTops);
+
+  // Genomskinliga kopior som ritas i stället för väggarna som skymmer figuren.
+  ghostAlpha = new THREE.InstancedBufferAttribute(new Float32Array(GHOST_MAX).fill(1), 1);
+  ghostAlpha.setUsage(THREE.DynamicDrawUsage);
+  const gs = wallSideGeometry().clone();
+  gs.setAttribute('instAlpha', ghostAlpha);
+  const gt = wallTopGeometry().clone();
+  gt.setAttribute('instAlpha', ghostAlpha);
+  ghostSides = new THREE.InstancedMesh(gs, ghostMaterial(mats.wallSide), GHOST_MAX);
+  ghostTops = new THREE.InstancedMesh(gt, ghostMaterial(mats.wallTop), GHOST_MAX);
+  ghostSides.count = ghostTops.count = 0;
+  ghostSides.frustumCulled = ghostTops.frustumCulled = false;
+  ghostSides.renderOrder = ghostTops.renderOrder = 5;
+  mazeGroup.add(ghostSides, ghostTops);
 
   const marker = (cell, mat, geo) => {
     const m = new THREE.Mesh(geo, mat);
@@ -1059,11 +1106,11 @@ function finish(win, reason = 'time') {
   }, win ? 1400 : 1200);
 }
 
-// ---------- Sänk väggar som skymmer ----------
-// Väggarna som är i vägen sänks till knähöjd och stannar nere en stund, så att de
-// inte hoppar upp och ner när kameran rör sig.
-const CUT_SCALE = 0.3;
-const CUT_HOLD = 0.9; // sekunder som en vägg stannar nere
+// ---------- Väggar som skymmer blir genomskinliga ----------
+// Väggarna mellan kameran och figuren ritas halvgenomskinligt, medan väggarna bakom
+// figuren är solida. De stannar genomskinliga en stund så att de inte flimrar.
+const FADE_ALPHA = 0.42;
+const FADE_HOLD = 0.7; // sekunder som en vägg stannar genomskinlig
 let fadeTick = 0;
 
 /** Samlar väggarna som en stråle från `from` till `to` går igenom. */
@@ -1104,28 +1151,53 @@ function updateFade(dt) {
       sampleWalls(from, to, hits);
       sampleWalls(from.clone().add(side), to.clone().add(side), hits);
       sampleWalls(from.clone().sub(side), to.clone().sub(side), hits);
+      let changed = false;
       for (const id of hits) {
         const e = cut.get(id);
-        if (e) e.hold = CUT_HOLD;
-        else cut.set(id, { scale: 1, hold: CUT_HOLD });
+        if (e) e.hold = FADE_HOLD;
+        else if (cut.size < GHOST_MAX) {
+          cut.set(id, { alpha: 1, hold: FADE_HOLD });
+          hideWall(id);
+          changed = true;
+        }
+      }
+      if (changed) {
+        wallSides.instanceMatrix.needsUpdate = true;
+        wallTops.instanceMatrix.needsUpdate = true;
       }
     }
   }
-  if (!cut.size) return;
+  if (!cut.size) {
+    if (ghostSides.count) ghostSides.count = ghostTops.count = 0;
+    return;
+  }
+  let restored = false;
+  let slot = 0;
   for (const [id, e] of cut) {
     e.hold -= dt;
-    const goal = S.phase === 'play' && e.hold > 0 ? CUT_SCALE : 1;
-    const rate = goal < e.scale ? 6 : 2; // snabbt ner, långsamt upp
-    e.scale += Math.sign(goal - e.scale) * Math.min(Math.abs(goal - e.scale), dt * rate);
-    if (goal === 1 && e.scale >= 0.999) {
+    const goal = S.phase === 'play' && e.hold > 0 ? FADE_ALPHA : 1;
+    const rate = goal < e.alpha ? 4 : 1.5; // snabbt genomskinlig, långsamt tillbaka
+    e.alpha += Math.sign(goal - e.alpha) * Math.min(Math.abs(goal - e.alpha), dt * rate);
+    if (goal === 1 && e.alpha >= 0.999) {
       setWallMatrix(id, 1);
       cut.delete(id);
-    } else {
-      setWallMatrix(id, e.scale);
+      restored = true;
+      continue;
     }
+    computeWallMatrix(id, 1);
+    ghostSides.setMatrixAt(slot, dummy.matrix);
+    ghostTops.setMatrixAt(slot, dummy.matrix);
+    ghostAlpha.array[slot] = e.alpha;
+    slot++;
   }
-  wallSides.instanceMatrix.needsUpdate = true;
-  wallTops.instanceMatrix.needsUpdate = true;
+  ghostSides.count = ghostTops.count = slot;
+  ghostSides.instanceMatrix.needsUpdate = true;
+  ghostTops.instanceMatrix.needsUpdate = true;
+  ghostAlpha.needsUpdate = true;
+  if (restored) {
+    wallSides.instanceMatrix.needsUpdate = true;
+    wallTops.instanceMatrix.needsUpdate = true;
+  }
 }
 
 // ---------- Backspegel ----------
