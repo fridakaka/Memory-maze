@@ -226,17 +226,6 @@ export function makeHero(id) {
   const g = new THREE.Group();
   const parts = (builders[id] ?? builders.kille)(g);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  // Svag siluett som syns när figuren skyms av en häck.
-  const ghost = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.45, depthFunc: THREE.GreaterDepth, depthWrite: false,
-  });
-  const meshes = [];
-  g.traverse((o) => { if (o.isMesh) meshes.push(o); });
-  for (const m of meshes) {
-    const copy = new THREE.Mesh(m.geometry, ghost);
-    copy.renderOrder = 10;
-    m.add(copy);
-  }
   g.userData = parts;
   return g;
 }
