@@ -25,14 +25,31 @@ const key = (x, y) => `${x},${y}`;
 
 export const MAX_SIZE = 28;
 
-/** Svårighetsparametrar för en nivå (1, 2, 3 ...). */
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Svårighetsparametrar för en nivå (1, 2, 3 ...).
+ * d (0-1) är banans svårighet. Den stiger långsamt men varierar från bana
+ * till bana: var femte bana är tuff och banan efter är en andningspaus.
+ * mode är 'time' (tidsgräns) eller 'monster' (ett monster jagar).
+ */
 export function levelParams(level) {
-  const size = Math.min(5 + Math.floor((level - 1) * 0.7), MAX_SIZE);
+  const rng = mulberry32(level * 104729 + 7);
+  const trend = Math.min(1, (level - 1) / 30);
+  const amp = 0.15 + 0.85 * Math.min(1, (level - 1) / 12);
+  let offset = (rng() - 0.5) * 0.8;
+  if (level % 5 === 0) offset = 0.35;
+  else if (level % 5 === 1 && level > 1) offset = -0.4;
+  const d = clamp(trend + offset * amp, 0, 1);
+  const mode = level >= 4 && (level === 4 || rng() < 0.4) ? 'monster' : 'time';
+  const size = Math.min(5 + Math.round(d * 21), MAX_SIZE);
   return {
     width: size,
-    height: size + (level > 3 ? 1 : 0),
-    loops: level < 4 ? 0 : Math.floor(level / 3),
+    height: size + (d > 0.2 ? 1 : 0),
+    loops: d < 0.2 ? 0 : Math.round(d * 7),
     seed: level * 7919 + 17,
+    d,
+    mode,
   };
 }
 
@@ -187,14 +204,37 @@ export function relativeDir(heading, dir) {
 export const RUN_SPEED = 3.4; // celler per sekund
 export const DECISION_SECONDS = 1.2; // räknas in per korsning i tidsgränsen
 
-/** Tidsgräns i sekunder för en bana. */
-export function timeLimit(maze, level, difficulty = 'medium', tweak = 1) {
+/** Tid en spelare som kan vägen behöver (löpning plus ett vägval per korsning). */
+export function perfectTime(maze) {
   const nodesOnPath = maze.solution.filter((c) => isNode(maze, c.x, c.y)).length;
-  const base = (maze.solution.length - 1) / RUN_SPEED + nodesOnPath * DECISION_SECONDS;
-  // Generöst i början och snävare ju längre man kommer.
-  const levelFactor = Math.max(1.9, 4.2 - (level - 1) * 0.25);
-  const diffFactor = { easy: 1.3, medium: 1, hard: 0.8 }[difficulty] ?? 1;
-  return Math.ceil(base * levelFactor * diffFactor * tweak);
+  return (maze.solution.length - 1) / RUN_SPEED + nodesOnPath * DECISION_SECONDS;
+}
+
+const DIFF_FACTOR = { easy: 1.3, medium: 1, hard: 0.8 };
+
+/** Tidsgräns i sekunder för en bana med svårighet d (0-1). */
+export function timeLimit(maze, d, difficulty = 'medium', tweak = 1) {
+  // Generöst på lätta banor och snävare på svåra.
+  const levelFactor = 4.2 - 2.3 * d;
+  return Math.ceil(perfectTime(maze) * levelFactor * (DIFF_FACTOR[difficulty] ?? 1) * tweak);
+}
+
+/**
+ * Monster som jagar spelaren i stället för tidsgräns.
+ * Monstret väcks efter `delay` sekunder vid starten och springer med `speed`
+ * celler per sekund längs kortaste vägen till spelaren.
+ */
+export function monsterPlan(maze, d, difficulty = 'medium', tweak = 1) {
+  const perfect = perfectTime(maze);
+  const len = maze.solution.length - 1;
+  const delay = { easy: 7, medium: 5, hard: 3 }[difficulty] ?? 5;
+  const arrival = perfect * Math.max(1.15, (2.0 - 0.8 * d) * (DIFF_FACTOR[difficulty] ?? 1) * tweak);
+  const window = Math.max(arrival - delay, len / (RUN_SPEED * 1.05));
+  return {
+    delay,
+    speed: len / window,
+    starLimit: Math.ceil(perfect * 1.9),
+  };
 }
 
 export const STUDY_SECONDS = { easy: 30, medium: 15, hard: 8 };

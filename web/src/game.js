@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
+  DELTA, distances, monsterPlan, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 
@@ -244,6 +244,42 @@ function makeHero() {
 const hero = makeHero();
 scene.add(hero);
 
+// Monstret: en stor mörklila klump med horn och stora ögon.
+function makeMonster() {
+  const g = new THREE.Group();
+  const purple = new THREE.MeshLambertMaterial({ color: 0x5b3a8c });
+  const horn = new THREE.MeshLambertMaterial({ color: 0xf0e2c0 });
+  const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const red = new THREE.MeshLambertMaterial({ color: 0xd9304a, emissive: 0x5a0010 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), purple);
+  body.scale.set(1, 0.95, 1);
+  body.position.y = 0.36;
+  g.add(body);
+  for (const s of [-1, 1]) {
+    const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 10), horn);
+    h.position.set(0.17 * s, 0.7, 0.02);
+    h.rotation.z = -0.35 * s;
+    g.add(h);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), white);
+    eye.position.set(0.13 * s, 0.46, 0.27);
+    g.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), red);
+    pupil.position.set(0.13 * s, 0.46, 0.35);
+    g.add(pupil);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), purple);
+    foot.position.set(0.17 * s, 0.07, 0.05);
+    g.add(foot);
+  }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.05), new THREE.MeshLambertMaterial({ color: 0x1b0f2b }));
+  mouth.position.set(0, 0.27, 0.33);
+  g.add(mouth);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  g.visible = false;
+  return g;
+}
+const monster = makeMonster();
+scene.add(monster);
+
 // ---------- Spelstate ----------
 const S = {
   phase: 'menu', // menu | study | play | ended
@@ -251,6 +287,7 @@ const S = {
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
   yaw: 0, camYaw: 0, camVel: 0,
+  kind: 'time', mon: null, difficulty: 0,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
   anim: { t: 0, reaction: null, reactionT: 0 },
@@ -272,7 +309,18 @@ function startLevel() {
 
   const dbgStudy = Number($('dbg-study').value) || 0;
   const dbgTime = Number($('dbg-time').value) || 1;
-  S.limit = timeLimit(maze, level, settings.difficulty, dbgTime);
+  S.kind = params.mode;
+  S.difficulty = params.d;
+  monster.visible = false;
+  S.mon = null;
+  if (S.kind === 'monster') {
+    const plan = monsterPlan(maze, params.d, settings.difficulty, dbgTime);
+    S.limit = plan.starLimit; // Bara för stjärnorna, ingen tidsgräns.
+    S.mon = { plan, delay: plan.delay, awake: false, cell: { ...maze.start }, next: null, t: 0,
+      dist: Infinity, map: null, heroKey: '', yaw: 0 };
+  } else {
+    S.limit = timeLimit(maze, params.d, settings.difficulty, dbgTime);
+  }
   S.timeLeft = S.limit;
   S.elapsed = 0;
   S.wrongTurns = 0;
@@ -303,8 +351,10 @@ function startLevel() {
   show($('ready'));
   show($('controls'), false);
   show($('compass'), false);
-  $('hud-level').textContent = `Bana ${level}`;
-  $('hud-phase').textContent = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
+  $('hud-level').textContent = S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`;
+  show($('danger'), false);
+  const study = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
+  $('hud-phase').textContent = S.kind === 'monster' ? `${study} – sedan jagar ett monster dig` : study;
   updateHud();
 }
 
@@ -316,7 +366,7 @@ function beginPlay() {
   camera = playCam;
   show($('ready'), false);
   show($('controls'));
-  $('hud-phase').textContent = 'Spring!';
+  $('hud-phase').textContent = S.kind === 'monster' ? 'Monstret vaknar snart' : 'Spring!';
   snapCamera();
   arriveAtNode(false);
 }
@@ -324,7 +374,10 @@ function beginPlay() {
 function updateHud() {
   $('hud-lives').textContent = '❤'.repeat(save.lives) + '♡'.repeat(MAX_LIVES - save.lives);
   $('hud-wrong').textContent = `✗ ${S.wrongTurns}`;
-  const frac = S.phase === 'study' ? S.studyLeft / S.studyTotal : Math.max(0, S.timeLeft / S.limit);
+  let frac;
+  if (S.phase === 'study') frac = S.studyLeft / S.studyTotal;
+  else if (S.kind === 'monster') frac = S.mon && S.mon.awake ? Math.min(1, S.mon.dist / 10) : 1;
+  else frac = Math.max(0, S.timeLeft / S.limit);
   $('bar-fill').style.width = `${frac * 100}%`;
   $('bar-fill').classList.toggle('low', frac < 0.25);
 }
@@ -400,6 +453,61 @@ function stepRun(dt) {
     arriveAtNode();
     updateHud();
   }
+}
+
+// ---------- Monster ----------
+function updateMonster(dt) {
+  const m = S.mon;
+  if (!m || S.phase !== 'play') return;
+  if (!m.awake) {
+    m.delay -= dt;
+    $('hud-phase').textContent = `Monstret vaknar om ${Math.max(1, Math.ceil(m.delay))} s`;
+    if (m.delay > 0) return;
+    m.awake = true;
+    monster.visible = true;
+    monster.position.copy(cellPos(m.cell.x, m.cell.y));
+    $('hud-phase').textContent = 'Monstret jagar dig!';
+    show($('danger'));
+  }
+  // Håll koll på var spelaren är och hur långt monstret har dit.
+  const hx = Math.round(hero.position.x + maze.width / 2 - 0.5);
+  const hy = Math.round(hero.position.z + maze.height / 2 - 0.5);
+  const heroKey = `${hx},${hy}`;
+  if (heroKey !== m.heroKey) {
+    m.heroKey = heroKey;
+    m.map = distances(maze, { x: hx, y: hy });
+  }
+  m.dist = m.map.get(`${m.cell.x},${m.cell.y}`) ?? Infinity;
+
+  if (!m.next) {
+    const d = openDirs(maze, m.cell.x, m.cell.y).find((dir) =>
+      m.map.get(`${m.cell.x + DELTA[dir].dx},${m.cell.y + DELTA[dir].dy}`) === m.dist - 1);
+    if (d) {
+      m.next = { x: m.cell.x + DELTA[d].dx, y: m.cell.y + DELTA[d].dy };
+      m.t = 0;
+      m.yaw = Math.atan2(DELTA[d].dx, DELTA[d].dy);
+    }
+  }
+  if (m.next) {
+    m.t += m.plan.speed * dt;
+    const a = cellPos(m.cell.x, m.cell.y);
+    const b = cellPos(m.next.x, m.next.y);
+    monster.position.lerpVectors(a, b, Math.min(1, m.t));
+    if (m.t >= 1) { m.cell = m.next; m.next = null; }
+  }
+  const dx = monster.position.x - hero.position.x;
+  const dz = monster.position.z - hero.position.z;
+  if (Math.hypot(dx, dz) < 0.55) finish(false, 'monster');
+}
+
+function animateMonster(dt) {
+  if (!monster.visible || !S.mon) return;
+  const t = performance.now() / 1000;
+  monster.position.y = Math.abs(Math.sin(t * 9)) * 0.08;
+  monster.rotation.y = lerpAngle(monster.rotation.y, S.mon.yaw, Math.min(1, dt * 10));
+  monster.scale.set(1 + Math.sin(t * 9) * 0.03, 1 - Math.sin(t * 9) * 0.03, 1);
+  // Röd kant på skärmen när monstret är nära.
+  $('danger').style.opacity = S.phase === 'play' ? Math.max(0, Math.min(0.7, (6 - S.mon.dist) / 6)) : 0;
 }
 
 // ---------- Reaktioner ----------
@@ -480,12 +588,13 @@ function updateCompass() {
 }
 
 // ---------- Slut ----------
-function finish(win) {
+function finish(win, reason = 'time') {
   S.phase = 'ended';
   react(win ? 'win' : 'lose');
   show($('controls'), false);
   show($('compass'), false);
-  const used = S.limit - S.timeLeft;
+  show($('danger'), false);
+  const used = S.elapsed;
   const key = `${settings.mode}:${settings.difficulty}:${settings.level}`;
 
   let stars = 0;
@@ -499,7 +608,7 @@ function finish(win) {
   updateHud();
 
   setTimeout(() => {
-    $('res-title').textContent = win ? 'Du hittade ut!' : 'Tiden tog slut';
+    $('res-title').textContent = win ? 'Du hittade ut!' : reason === 'monster' ? 'Monstret hann ikapp dig' : 'Tiden tog slut';
     $('res-stars').innerHTML = [0, 1, 2]
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
@@ -524,18 +633,20 @@ function frame(now) {
     const star = mazeGroup.getObjectByName('goalStar');
     if (star) star.rotation.y += dt * 2;
   } else if (S.phase === 'play') {
-    S.timeLeft -= dt;
     S.elapsed += dt;
-    if (S.timeLeft <= 0) {
+    if (S.kind === 'time') S.timeLeft -= dt;
+    if (S.kind === 'time' && S.timeLeft <= 0) {
       S.timeLeft = 0;
       S.run = null;
       finish(false);
-    } else if (S.run) {
-      stepRun(dt);
+    } else {
+      if (S.run) stepRun(dt);
+      updateMonster(dt);
     }
     updateHud();
   }
 
+  animateMonster(dt);
   if (S.phase !== 'menu' && S.phase !== 'study') {
     animateHero(dt);
     // Kameran vrider sig mjukt och långsamt efter figuren (mindre åksjuka).
@@ -562,6 +673,8 @@ function frame(now) {
 // ---------- Menyer och input ----------
 function refreshMenu() {
   $('lvl-num').textContent = settings.level;
+  const info = levelParams(settings.level);
+  $('lvl-info').textContent = `${info.mode === 'monster' ? 'Monster' : 'Tidsgräns'} · ${info.width}×${info.height} rutor`;
   const best = save.stars[`${settings.mode}:${settings.difficulty}:${settings.level}`] || 0;
   $('lvl-stars').textContent = '★'.repeat(best) + '☆'.repeat(3 - best);
 }
