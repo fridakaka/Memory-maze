@@ -119,12 +119,17 @@ window.addEventListener('resize', resize);
 // ---------- Labyrintens 3D-modell ----------
 let maze = null;
 let mazeGroup = null;
+let wallMeshes = [];
+const fading = new Map(); // vägg -> aktuell opacitet
 let pathGroup = null;
 const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maze.height / 2 + 0.5);
 
 function buildMazeMesh() {
   if (mazeGroup) scene.remove(mazeGroup);
   mazeGroup = new THREE.Group();
+  wallMeshes = [];
+  fading.clear();
+  S.fadeTargets = null;
   const { width: W, height: H } = maze;
 
   const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.2, H + 1.2), mats.floor);
@@ -140,6 +145,7 @@ function buildMazeMesh() {
     m.castShadow = true;
     m.receiveShadow = true;
     mazeGroup.add(m);
+    wallMeshes.push(m);
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -662,17 +668,18 @@ function animateHero(dt) {
     a.reactionT += dt;
     const rt = a.reactionT;
     if (r === 'look' || r === 'idle') {
-      // Tittar åt sidorna, vänder sig mot kameran och vinkar, kliar sig sedan i huvudet.
+      // Vänder sig snabbt mot kameran och vinkar, tittar sedan runt och kliar sig i huvudet.
       const c = rt % 9;
-      if (c < 2.2) {
-        head.rotation.y = Math.sin(c * 3) * 0.7 * Math.min(1, c * 2);
-      } else if (c < 5.2) {
-        const k = Math.min(1, (c - 2.2) * 2.5);
+      if (c < 3.4) {
+        const k = Math.min(1, c * 5);
         head.rotation.y = k * 2.3;
         head.rotation.z = k * 0.1;
         arms[1].rotation.z = (2.5 + Math.sin(c * 11) * 0.35) * k;
+      } else if (c < 5.4) {
+        const k = Math.min(1, (c - 3.4) * 4);
+        head.rotation.y = Math.sin((c - 3.4) * 3) * 0.7 * k;
       } else {
-        const k = Math.min(1, (c - 5.2) * 3);
+        const k = Math.min(1, (c - 5.4) * 3);
         head.rotation.z = Math.sin(c * 14) * 0.12 * k;
         arms[0].rotation.z = -2.3 * k;
         hero.position.y = Math.abs(Math.sin(c * 7)) * 0.015;
@@ -683,6 +690,7 @@ function animateHero(dt) {
       const k = Math.min(1, rt * 4) * (rt < 1.6 ? 1 : 0);
       arms[0].rotation.z = -0.9 * k;
       arms[1].rotation.z = 0.9 * k;
+      if (rt > 1.6) { a.reaction = 'look'; a.reactionT = 0; }
     } else if (r === 'win') {
       hero.position.y = Math.abs(Math.sin(rt * 6)) * 0.35;
       hero.rotation.y += dt * 6;
@@ -759,6 +767,46 @@ function finish(win, reason = 'time') {
   }, win ? 1400 : 1200);
 }
 
+// ---------- Tona ut häckar i vägen ----------
+const sightRay = new THREE.Raycaster();
+const FADE_TO = 0.18;
+let fadeTick = 0;
+
+function updateFade(dt) {
+  const targets = new Set();
+  if (S.phase === 'play' && wallMeshes.length) {
+    fadeTick = (fadeTick + 1) % 2; // räcker att kolla varannan bildruta
+    if (fadeTick === 0) {
+      const to = new THREE.Vector3(hero.position.x, 0.5, hero.position.z);
+      const dir = to.clone().sub(playCam.position);
+      const dist = dir.length();
+      sightRay.set(playCam.position, dir.normalize());
+      sightRay.far = Math.max(0, dist - 0.25);
+      for (const hit of sightRay.intersectObjects(wallMeshes, false)) targets.add(hit.object);
+      S.fadeTargets = targets;
+    }
+  }
+  const wanted = S.fadeTargets ?? new Set();
+  for (const m of wanted) if (!fading.has(m)) fading.set(m, 1);
+  for (const [m, op] of fading) {
+    const goal = S.phase === 'play' && wanted.has(m) ? FADE_TO : 1;
+    const next = op + Math.sign(goal - op) * Math.min(Math.abs(goal - op), dt * 7);
+    if (!m.userData.fadeMat) {
+      m.userData.fadeMat = mats.wall.clone();
+      m.userData.fadeMat.transparent = true;
+    }
+    if (next >= 0.999 && goal === 1) {
+      m.material = mats.wall;
+      fading.delete(m);
+    } else {
+      m.material = m.userData.fadeMat;
+      m.userData.fadeMat.opacity = next;
+      m.userData.fadeMat.depthWrite = next > 0.9;
+      fading.set(m, next);
+    }
+  }
+}
+
 // ---------- Backspegel ----------
 // Visar vyn bakåt i en ruta, så att kameran inte behöver vridas.
 function renderRear() {
@@ -827,6 +875,7 @@ function frame(now) {
   }
 
   if (maze) {
+    updateFade(dt);
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster') renderRear();
   }
