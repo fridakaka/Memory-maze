@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Maze Memory</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-row">
+      <span id="hud-level">Bana 1</span>
+      <span id="hud-lives">❤❤❤❤❤</span>
+      <span id="hud-wrong">✗ 0</span>
+    </div>
+    <div class="bar"><div id="bar-fill"></div></div>
+    <div id="hud-phase">Studera kartan</div>
+  </div>
+
+  <button id="ready" class="hidden">Jag är redo</button>
+
+  <div id="compass" class="hidden"><div id="needle"><span>N</span></div></div>
+
+  <div id="controls" class="hidden">
+    <button data-rel="left" aria-label="Vänster">←</button>
+    <button data-rel="forward" aria-label="Rakt fram">↑</button>
+    <button data-rel="right" aria-label="Höger">→</button>
+    <button data-rel="back" aria-label="Vänd tillbaka" class="back">↩ Vänd</button>
+  </div>
+
+  <!-- Meny -->
+  <div id="menu" class="panel">
+    <h1>Maze Memory</h1>
+    <p class="tag">Se vägen. Kom ihåg den. Hitta ut.</p>
+
+    <h2>Spelläge</h2>
+    <div class="seg" id="seg-mode">
+      <button data-v="navigator" class="on">Navigator<small>Hitta vägen själv</small></button>
+      <button data-v="memory">Memory<small>Vägen är markerad</small></button>
+    </div>
+
+    <h2>Svårighet</h2>
+    <div class="seg" id="seg-diff">
+      <button data-v="easy">Lätt</button>
+      <button data-v="medium" class="on">Medel</button>
+      <button data-v="hard">Svår</button>
+    </div>
+
+    <h2>Bana</h2>
+    <div class="stepper">
+      <button id="lvl-down">−</button>
+      <span id="lvl-num">1</span>
+      <button id="lvl-up">+</button>
+    </div>
+    <div id="lvl-stars" class="stars"></div>
+
+    <button id="play" class="primary">Spela</button>
+
+    <details>
+      <summary>Testinställningar</summary>
+      <label>Studietid (sek, 0 = enligt svårighet)
+        <input id="dbg-study" type="number" min="0" max="120" value="0">
+      </label>
+      <label>Tidsgräns, faktor
+        <input id="dbg-time" type="number" min="0.3" max="5" step="0.1" value="1">
+      </label>
+      <button id="reset-save">Nollställ sparad progress</button>
+    </details>
+  </div>
+
+  <!-- Resultat -->
+  <div id="result" class="panel hidden">
+    <h1 id="res-title"></h1>
+    <div id="res-stars" class="stars big"></div>
+    <p id="res-text"></p>
+    <button id="res-next" class="primary">Nästa bana</button>
+    <button id="res-again">Spela om</button>
+    <button id="res-menu">Meny</button>
+  </div>
+
+  <script type="module" src="src/game.js"></script>
+</body>
+</html>
