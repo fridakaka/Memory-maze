@@ -43,7 +43,7 @@ function addFace(head, { eyeX = 0.09, eyeY = -0.01, eyeZ = 0.2, mouthY = -0.11, 
     const pink = new THREE.MeshLambertMaterial({ color: 0xff8fa3, transparent: true, opacity: 0.55 });
     for (const s of [-1, 1]) head.add(at(sph(0.04, pink, 1, 0.65, 0.3), 0.15 * s, -0.06, mouthZ - 0.04));
   }
-  return { eyes, mouth };
+  return { eyes, mouth, params: { eyeX, eyeY, eyeZ } };
 }
 
 /** Kropp, armar och ben som är gemensamma. */
@@ -228,4 +228,114 @@ export function makeHero(id) {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.userData = parts;
   return g;
+}
+
+/**
+ * Tillbehör efter väder. Alla syns bakifrån. Tidigare tillbehör tas bort först.
+ * weather: 'none' | 'sun' | 'rain' | 'snow' | 'fog' | 'wind'
+ */
+export function setAccessory(hero, weather) {
+  const ud = hero.userData;
+  ud.undo?.forEach((f) => f());
+  ud.undo = [];
+  ud.flutter = [];
+  ud.hold = null;
+  if (!weather || weather === 'none') return;
+  const { head, body, arms, legs, face } = ud;
+  const add = (parent, obj) => {
+    parent.add(obj);
+    obj.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+    ud.undo.push(() => parent.remove(obj));
+    return obj;
+  };
+  const recolor = (mesh, color) => {
+    const old = mesh.material.color.getHex();
+    mesh.material.color.setHex(color);
+    ud.undo.push(() => mesh.material.color.setHex(old));
+  };
+  const lam = (c, e = 0x000000) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+  const dome = (r, theta, color) => new THREE.Mesh(new THREE.SphereGeometry(r, 22, 14, 0, TAU, 0, theta), lam(color));
+
+  if (weather === 'sun') {
+    const { eyeX, eyeY, eyeZ } = face.params;
+    const glass = new THREE.Group();
+    const black = lam(0x15151a);
+    for (const side of [-1, 1]) {
+      glass.add(at(sph(0.07, black, 1, 0.85, 0.45), eyeX * side, eyeY, eyeZ + 0.05));
+      glass.add(at(sph(0.012, lam(0xffffff), 1, 1, 1), eyeX * side + 0.02, eyeY + 0.025, eyeZ + 0.092));
+    }
+    glass.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), black), 0, eyeY + 0.01, eyeZ + 0.085));
+    add(head, glass);
+    // Solhatt av halm
+    const hat = new THREE.Group();
+    hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 24), lam(0xe8c96a)), 0, 0.2, 0));
+    hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.13, 20), lam(0xe8c96a)), 0, 0.26, 0));
+    hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.195, 0.195, 0.035, 20), lam(0xe63946)), 0, 0.22, 0));
+    hat.rotation.x = -0.12;
+    add(head, hat);
+  } else if (weather === 'rain') {
+    // Gul regnrock med huva, röda stövlar och ett paraply vid sidan.
+    const yellow = 0xffc92e;
+    recolor(body, yellow);
+    for (const arm of arms) recolor(arm.children[0], yellow);
+    for (const leg of legs) recolor(leg, 0xd9363e);
+    const hood = dome(0.268, Math.PI * 0.62, yellow);
+    hood.rotation.x = -0.28;
+    add(head, hood);
+    const um = new THREE.Group();
+    um.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.85, 8), lam(0x444444)), 0, 0.42, 0));
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.38, 22, 12, 0, TAU, 0, Math.PI * 0.5), lam(0xe63946));
+    canopy.scale.y = 0.55;
+    canopy.position.y = 0.82;
+    um.add(canopy);
+    um.add(at(sph(0.025, lam(0x444444)), 0, 1.03, 0));
+    um.position.set(0.34, 0.12, 0.02);
+    um.rotation.z = -0.55;
+    add(hero, um);
+    ud.hold = 'umbrella';
+  } else if (weather === 'snow') {
+    const beanie = new THREE.Group();
+    const wool = dome(0.262, Math.PI * 0.42, 0x2f6fe0);
+    beanie.add(wool);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.254, 0.03, 8, 24), lam(0xffffff));
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.065;
+    beanie.add(band);
+    beanie.add(at(sph(0.058, lam(0xffffff)), 0, 0.27, 0));
+    beanie.rotation.x = -0.1;
+    add(head, beanie);
+    const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.05, 10, 24), lam(0xe63946));
+    scarf.position.y = 0.5;
+    scarf.rotation.x = Math.PI / 2;
+    add(hero, scarf);
+    add(hero, at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.035), lam(0xe63946)), 0.07, 0.38, -0.15));
+  } else if (weather === 'fog') {
+    // Lykta i handen
+    const lantern = new THREE.Group();
+    lantern.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), lam(0x222222)), 0, -0.2, 0.02));
+    lantern.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.11, 12), lam(0x222222)), 0, -0.29, 0.02));
+    lantern.add(at(sph(0.062, lam(0xffe27a, 0xffc300)), 0, -0.29, 0.02));
+    add(arms[0], lantern);
+  } else if (weather === 'wind') {
+    const cap = new THREE.Group();
+    cap.add(dome(0.258, Math.PI * 0.45, 0x2fa84f));
+    cap.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.14), lam(0x2fa84f)), 0, 0.06, 0.26));
+    cap.add(at(sph(0.025, lam(0xffffff)), 0, 0.26, 0));
+    cap.rotation.x = -0.12;
+    add(head, cap);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.045, 10, 24), lam(0xffd23f));
+    ring.position.y = 0.5;
+    ring.rotation.x = Math.PI / 2;
+    add(hero, ring);
+    // Halsduksflik som fladdrar bakom
+    const tail = new THREE.Group();
+    tail.position.set(0.05, 0.48, -0.14);
+    for (let i = 0; i < 5; i++) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.03, 0.1), lam(i % 2 ? 0xffd23f : 0xe63946));
+      seg.position.set(0, 0, -0.09 * i - 0.05);
+      tail.add(seg);
+      ud.flutter.push({ mesh: seg, i });
+    }
+    add(hero, tail);
+  }
 }

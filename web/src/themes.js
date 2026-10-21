@@ -393,13 +393,13 @@ export const THEMES = [
   { id: 'hedge', name: 'Häck', side: hedge, top: hedge, floor: gravel, ground: 0x4f6f3f, fog: 0xdfe8e1, sky: ['#8fbfe6', '#c9e0ee', '#e8eee6'] },
   { id: 'flowers', name: 'Blommande buskar', side: flowers, top: flowers, floor: gravel, ground: 0x56753f, fog: 0xe3ece0, sky: ['#8fbfe6', '#cfe4ee', '#eef2e4'] },
   { id: 'brick', name: 'Tegelmur', side: brick, top: flat('#8a8076', ['#7a7066', '#9a9086']), floor: cobble, ground: 0x5e6168, fog: 0xdcdfe2, sky: ['#9bbad4', '#cfdbe4', '#e6eaec'] },
-  { id: 'indoor', name: 'Galleri', side: plaster, top: flat('#efe4cf', ['#e6d9bf', '#f5ecda']), floor: parquet, ground: 0x6b4f35, fog: 0xeadfca, sky: ['#f1e6cf', '#ecdfc4', '#e4d3b2'] },
+  { id: 'indoor', noWeather: true, name: 'Galleri', side: plaster, top: flat('#efe4cf', ['#e6d9bf', '#f5ecda']), floor: parquet, ground: 0x6b4f35, fog: 0xeadfca, sky: ['#f1e6cf', '#ecdfc4', '#e4d3b2'] },
   { id: 'autumn', name: 'Höstlöv', side: autumn, top: autumn, floor: leaves, ground: 0x6b4a2b, fog: 0xf0dcc0, sky: ['#9cc0d9', '#e6d4b4', '#f3d9b0'] },
   { id: 'snow', name: 'Snöhäck', side: snow, top: flat('#ffffff', ['#eef4f9', '#dbe8f2']), floor: snowGround, ground: 0x7d93a8, fog: 0xeaf0f5, sky: ['#a9c2d6', '#d4e0ea', '#eef3f7'] },
-  { id: 'library', name: 'Bibliotek', side: books, top: flat('#4a2f1b', ['#3b2514', '#5a3b22']), floor: carpet, ground: 0x3d2a1c, fog: 0x6b5038, sky: ['#3a2818', '#5a402a', '#6b5038'] },
-  { id: 'candy', name: 'Godisland', side: candy, top: flat('#ffd1e6', ['#ffc2de', '#ffe0f0']), floor: candyFloor, ground: 0xd98ab0, fog: 0xffd9ec, sky: ['#ff9ed0', '#ffc2e0', '#ffe3f1'] },
-  { id: 'reef', name: 'Korallgrotta', side: coral, top: coral, floor: sand, ground: 0x0b3a5c, fog: 0x2b8fbf, sky: ['#0e5a8a', '#1b86b8', '#4fb0d4'] },
-  { id: 'space', name: 'Rymdstation', side: metal, top: flat('#7d8aa0', ['#6f7c92', '#8c99ae']), floor: deck, ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: starfield, sky: ['#02030a', '#0a0e20', '#141a33'] },
+  { id: 'library', noWeather: true, name: 'Bibliotek', side: books, top: flat('#4a2f1b', ['#3b2514', '#5a3b22']), floor: carpet, ground: 0x3d2a1c, fog: 0x6b5038, sky: ['#3a2818', '#5a402a', '#6b5038'] },
+  { id: 'candy', noWeather: true, name: 'Godisland', side: candy, top: flat('#ffd1e6', ['#ffc2de', '#ffe0f0']), floor: candyFloor, ground: 0xd98ab0, fog: 0xffd9ec, sky: ['#ff9ed0', '#ffc2e0', '#ffe3f1'] },
+  { id: 'reef', noWeather: true, name: 'Korallgrotta', side: coral, top: coral, floor: sand, ground: 0x0b3a5c, fog: 0x2b8fbf, sky: ['#0e5a8a', '#1b86b8', '#4fb0d4'] },
+  { id: 'space', noWeather: true, name: 'Rymdstation', side: metal, top: flat('#7d8aa0', ['#6f7c92', '#8c99ae']), floor: deck, ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: starfield, sky: ['#02030a', '#0a0e20', '#141a33'] },
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
 ];
 
@@ -438,4 +438,39 @@ export function getAssets(theme) {
     };
   }
   return theme.assets;
+}
+
+/**
+ * Väder: påverkar himmel, dimma, ljus och partiklar. Figuren får tillbehör efter vädret.
+ * fog = [färg, nära, långt]. sun = ljusets styrka. sky = färger som ersätter temats himmel.
+ */
+export const WEATHERS = {
+  none: { id: 'none', name: '', emoji: '', fx: null },
+  sun: { id: 'sun', name: 'Sol', emoji: '☀️', fx: null, sun: 2.4, fog: null, sky: null },
+  rain: { id: 'rain', name: 'Regn', emoji: '🌧️', fx: 'rain', sun: 1.2, fog: [0xaab2b8, 4, 8.5], sky: ['#5d6b78', '#7d8b97', '#a3adb5'] },
+  snow: { id: 'snow', name: 'Snöfall', emoji: '❄️', fx: 'snow', sun: 1.7, fog: [0xe0e8ee, 3.5, 8], sky: ['#9fb3c4', '#c9d6e0', '#e4ecf2'] },
+  fog: { id: 'fog', name: 'Dimma', emoji: '🌫️', fx: null, sun: 1.3, fog: [0xd0d6da, 2, 6], sky: ['#b9c2c8', '#cfd6da', '#e2e6e8'] },
+  wind: { id: 'wind', name: 'Blåst', emoji: '💨', fx: 'wind', sun: 2.0, fog: null, sky: ['#7fb0d8', '#bcd6e8', '#e1ebe9'] },
+};
+
+/** Väder för en bana. De första banorna har alltid sol och inomhusteman har inget väder. */
+export function weatherFor(level, theme) {
+  if (theme.noWeather) return WEATHERS.none;
+  if (level <= 3) return WEATHERS.sun;
+  const r = mulberry32(level * 40503 + 11)();
+  if (r < 0.35) return WEATHERS.sun;
+  if (r < 0.55) return WEATHERS.rain;
+  if (r < 0.7) return WEATHERS.snow;
+  if (r < 0.85) return WEATHERS.fog;
+  return WEATHERS.wind;
+}
+
+/** Himmelstextur för ett väder (skapas första gången). */
+export function getWeatherSky(weather) {
+  if (!weather.sky) return null;
+  if (!weather.skyTex) {
+    const [top, mid, bottom] = weather.sky;
+    weather.skyTex = canvasTex(256, sky(top, mid, bottom), { clamp: true });
+  }
+  return weather.skyTex;
 }

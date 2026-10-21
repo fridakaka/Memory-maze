@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
-import { CHARACTERS, makeHero } from './heroes.js';
-import { THEMES, themeFor, getAssets } from './themes.js';
+import { CHARACTERS, makeHero, setAccessory } from './heroes.js';
+import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
   DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, pickLandmarks, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
@@ -70,6 +70,7 @@ const mats = {
   spot: new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x6b3300 }),
 };
 let theme = THEMES[0];
+let fogSetting = [0xdfe8e1, 4.5, 9.5]; // färg, nära, långt
 // Sidor och ovansida på en vägg: [+x, -x, ovan, under, +z, -z]
 let wallMaterials = [mats.wallSide, mats.wallSide, mats.wallTop, mats.wallSide, mats.wallSide, mats.wallSide];
 
@@ -354,6 +355,7 @@ function setHero(id) {
   hero.rotation.copy(old.rotation);
   scene.remove(old);
   scene.add(hero);
+  setAccessory(hero, weather.id);
   save.hero = id;
   writeSave();
 }
@@ -394,6 +396,126 @@ function makeMonster() {
 const monster = makeMonster();
 scene.add(monster);
 
+// ---------- Väder ----------
+let weather = WEATHERS.none;
+let fx = null; // regn, snö eller löv
+
+function dotTexture(draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  draw(c.getContext('2d'));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const softDot = dotTexture((ctx) => {
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+});
+const leafTexture = dotTexture((ctx) => {
+  ctx.translate(32, 32);
+  ctx.rotate(-0.7);
+  ctx.fillStyle = '#d9822b';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 24, 12, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#8f3b12';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-24, 0);
+  ctx.lineTo(24, 0);
+  ctx.stroke();
+});
+
+const FX_RADIUS = 6;
+const FX_HEIGHT = 6;
+
+function clearFx() {
+  if (!fx) return;
+  scene.remove(fx.obj);
+  fx.obj.geometry.dispose();
+  fx = null;
+}
+
+function makeFx(kind) {
+  clearFx();
+  if (!kind) return;
+  const n = kind === 'rain' ? 900 : kind === 'snow' ? 550 : 320;
+  const p = new Float32Array(n * 3);
+  const v = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    p[i * 3] = (Math.random() * 2 - 1) * FX_RADIUS;
+    p[i * 3 + 1] = Math.random() * FX_HEIGHT;
+    p[i * 3 + 2] = (Math.random() * 2 - 1) * FX_RADIUS;
+    if (kind === 'rain') { v[i * 3] = -1.2; v[i * 3 + 1] = -13 - Math.random() * 3; }
+    else if (kind === 'snow') { v[i * 3 + 1] = -0.9 - Math.random() * 0.7; }
+    else { v[i * 3] = 5 + Math.random() * 2; v[i * 3 + 1] = -0.2 - Math.random() * 0.3; }
+  }
+  const geo = new THREE.BufferGeometry();
+  let obj;
+  if (kind === 'rain') {
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 6), 3));
+    obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xcfe6ff, transparent: true, opacity: 0.65 }));
+  } else {
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    obj = new THREE.Points(geo, new THREE.PointsMaterial(kind === 'snow'
+      ? { map: softDot, size: 0.16, transparent: true, depthWrite: false, color: 0xffffff }
+      : { map: leafTexture, size: 0.2, transparent: true, depthWrite: false, alphaTest: 0.1 }));
+  }
+  obj.frustumCulled = false;
+  obj.visible = false;
+  scene.add(obj);
+  fx = { kind, obj, p, v, n, t: 0 };
+}
+
+function updateFx(dt) {
+  if (!fx) return;
+  fx.obj.visible = S.phase === 'play' || S.phase === 'ended';
+  if (!fx.obj.visible) return;
+  fx.t += dt;
+  const { p, v, n, kind } = fx;
+  const cx = hero.position.x;
+  const cz = hero.position.z;
+  const buf = fx.obj.geometry.attributes.position.array;
+  for (let i = 0; i < n; i++) {
+    const k = i * 3;
+    if (kind === 'snow') v[k] = Math.sin(fx.t * 0.8 + i) * 0.35;
+    if (kind === 'wind') v[k + 1] = Math.sin(fx.t * 3 + i) * 0.5;
+    p[k] += v[k] * dt;
+    p[k + 1] += v[k + 1] * dt;
+    p[k + 2] += v[k + 2] * dt;
+    if (p[k + 1] < 0) p[k + 1] += FX_HEIGHT;
+    if (p[k + 1] > FX_HEIGHT) p[k + 1] -= FX_HEIGHT;
+    // Håll partiklarna runt figuren
+    const dx = (((p[k] - cx + FX_RADIUS) % (2 * FX_RADIUS)) + 2 * FX_RADIUS) % (2 * FX_RADIUS) - FX_RADIUS;
+    const dz = (((p[k + 2] - cz + FX_RADIUS) % (2 * FX_RADIUS)) + 2 * FX_RADIUS) % (2 * FX_RADIUS) - FX_RADIUS;
+    p[k] = cx + dx;
+    p[k + 2] = cz + dz;
+    if (kind === 'rain') {
+      const b = i * 6;
+      buf[b] = p[k]; buf[b + 1] = p[k + 1]; buf[b + 2] = p[k + 2];
+      buf[b + 3] = p[k] + 0.04; buf[b + 4] = p[k + 1] + 0.4; buf[b + 5] = p[k + 2];
+    } else {
+      buf[k] = p[k]; buf[k + 1] = p[k + 1]; buf[k + 2] = p[k + 2];
+    }
+  }
+  fx.obj.geometry.attributes.position.needsUpdate = true;
+}
+
+/** Sätter vädret för banan: himmel, dimma, ljus, partiklar och figurens tillbehör. */
+function applyWeather(w) {
+  weather = w;
+  const sky = getWeatherSky(w);
+  if (sky) skyTex = sky;
+  fogSetting = w.fog ?? [theme.fog, 4.5, 9.5];
+  sun.intensity = w.sun ?? 2.2;
+  makeFx(w.fx);
+  setAccessory(hero, w.id);
+}
+
 // ---------- Spelstate ----------
 const S = {
   phase: 'menu', // menu | study | play | ended
@@ -420,6 +542,7 @@ function startLevel() {
   maze.spots = params.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
   maze.landmarks = pickLandmarks(maze, params.d, params.seed, maze.spots);
   applyTheme(themeFor(level), Math.max(maze.width, maze.height));
+  applyWeather(weatherFor(level, theme));
   buildMazeMesh();
   // Skuggkameran ska täcka hela labyrinten, även stora banor.
   const reach = Math.max(maze.width, maze.height) / 2 + 3;
@@ -478,7 +601,8 @@ function startLevel() {
   show($('controls'), false);
   show($('compass'), false);
   show($('rear'), false);
-  $('hud-level').textContent = S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`;
+  const wIcon = weather.emoji ? ` ${weather.emoji}` : '';
+  $('hud-level').textContent = (S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`) + wIcon;
   show($('danger'), false);
   const study = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
   $('hud-phase').textContent = S.kind === 'monster' ? `${study} – tunnor är gömställen` : study;
@@ -489,7 +613,7 @@ function beginPlay() {
   S.phase = 'play';
   pathGroup.visible = false;
   mapIcons.visible = false;
-  scene.fog = new THREE.Fog(theme.fog, 4.5, 9.5);
+  scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
   scene.background = skyTex;
   camera = playCam;
   show($('ready'), false);
@@ -728,6 +852,7 @@ function animateHero(dt) {
   if (a.blinkIn < -0.12) a.blinkIn = 2 + Math.random() * 3;
   face.eyes.scale.y = a.blinkIn < 0 ? 0.1 : 1;
 
+  const ud = hero.userData;
   if (running) {
     const f = t * 16;
     const s = Math.sin(f);
@@ -805,6 +930,12 @@ function animateHero(dt) {
       hero.rotation.z = Math.sin(rt * 2) * 0.05;
       face.mouth.rotation.z = 0;
     }
+  }
+  // Tillbehör: paraplyet hålls ut åt sidan och halsduken fladdrar
+  if (ud.hold === 'umbrella' && a.reaction !== 'win') arms[1].rotation.set(-0.15, 0, -0.45);
+  for (const f of ud.flutter ?? []) {
+    f.mesh.position.y = Math.sin(t * 9 + f.i * 0.9) * 0.02 * (f.i + 1) * (running ? 1.4 : 0.6);
+    f.mesh.rotation.y = Math.sin(t * 8 + f.i) * (0.15 + f.i * 0.12);
   }
 }
 
@@ -976,6 +1107,7 @@ function frame(now) {
 
   if (maze) {
     updateFade(dt);
+    updateFx(dt);
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster') renderRear();
   }
@@ -1077,7 +1209,9 @@ function refreshMenu(scroll = false) {
   $('stat-lives').textContent = `❤ ${save.lives}`;
   $('hero-emoji').textContent = heroEmoji();
   const t = levelType(settings.level);
-  $('lvl-info').textContent = `Bana ${settings.level} · ${themeFor(settings.level).name} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
+  const th = themeFor(settings.level);
+  const w = weatherFor(settings.level, th);
+  $('lvl-info').textContent = `Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
   $('play').textContent = `Spela bana ${settings.level}`;
   renderMap(scroll);
 }
@@ -1168,7 +1302,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 settings.level = Math.min(TOTAL_LEVELS, Math.max(1, save.level || 1));
