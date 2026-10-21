@@ -640,10 +640,12 @@ export function getAssets(theme) {
  */
 export const WEATHERS = {
   none: { id: 'none', name: '', emoji: '', fx: null },
-  sun: { id: 'sun', name: 'Sol', emoji: '☀️', fx: null, sun: 2.4, fog: null, sky: ['#1b6fd0', '#52a6ec', '#b3dcf6'], sunDisc: true },
+  sun: { id: 'sun', name: 'Sol', emoji: '☀️', fx: null, sun: 2.4, fog: null, sky: ['#1b6fd0', '#52a6ec', '#b3dcf6'], disc: 'sun' },
   rain: { id: 'rain', name: 'Regn', emoji: '🌧️', fx: 'rain', sun: 1.2, fog: [0xaab2b8, 4, 8.5], sky: ['#5d6b78', '#7d8b97', '#a3adb5'] },
   snow: { id: 'snow', name: 'Snöfall', emoji: '❄️', fx: 'snow', sun: 1.7, fog: [0xe0e8ee, 3.5, 8], sky: ['#9fb3c4', '#c9d6e0', '#e4ecf2'] },
   fog: { id: 'fog', name: 'Dimma', emoji: '🌫️', fx: null, sun: 1.3, fog: [0xd0d6da, 2, 6], sky: ['#b9c2c8', '#cfd6da', '#e2e6e8'] },
+  night: { id: 'night', name: 'Natt', emoji: '🌙', fx: null, sun: 0.55, hemi: 0.75, hemiColor: 0x8ea0e0, sunColor: 0x9fb4ff, fog: [0x0b1226, 2.5, 8],
+    sky: ['#040816', '#0b1a3a', '#1b2f5a'], disc: 'moon' },
   wind: { id: 'wind', name: 'Blåst', emoji: '💨', fx: 'wind', sun: 2.0, fog: null, sky: ['#7fb0d8', '#bcd6e8', '#e1ebe9'] },
 };
 
@@ -652,12 +654,13 @@ export function weatherFor(level, theme) {
   if (theme.noWeather) return WEATHERS.none;
   if (level <= 3) return WEATHERS.sun;
   const r = mulberry32(level * 40503 + 11)();
-  if (r < 0.35) return WEATHERS.sun;
+  if (r < 0.3) return WEATHERS.sun;
   // Det regnar inte i ett snölandskap.
-  if (r < 0.55) return theme.id === 'snow' ? WEATHERS.snow : WEATHERS.rain;
-  if (r < 0.7) return WEATHERS.snow;
-  if (r < 0.85) return WEATHERS.fog;
-  return WEATHERS.wind;
+  if (r < 0.45) return theme.id === 'snow' ? WEATHERS.snow : WEATHERS.rain;
+  if (r < 0.57) return WEATHERS.snow;
+  if (r < 0.69) return WEATHERS.fog;
+  if (r < 0.8) return WEATHERS.wind;
+  return WEATHERS.night;
 }
 
 /**
@@ -666,27 +669,51 @@ export function weatherFor(level, theme) {
  */
 export function getWeatherSky(weather, aspect = 2) {
   if (!weather.sky) return null;
-  const key = weather.sunDisc ? `sky${Math.round(aspect * 10)}` : 'skyTex';
+  const key = weather.disc ? `sky${Math.round(aspect * 10)}` : 'skyTex';
   weather.cache = weather.cache ?? {};
   if (!weather.cache[key]) {
     const [top, mid, bottom] = weather.sky;
-    if (weather.sunDisc) {
+    if (weather.disc) {
       const w = 256;
       const h = Math.round(256 * aspect);
       weather.cache[key] = canvasTex([w, h], (ctx, cw, ch) => {
         sky(top, mid, bottom)(ctx, cw, ch);
         const x = cw * 0.76;
         const y = ch * 0.17;
-        const glow = ctx.createRadialGradient(x, y, 4, x, y, cw * 0.42);
-        glow.addColorStop(0, 'rgba(255,248,200,0.95)');
-        glow.addColorStop(0.25, 'rgba(255,230,140,0.45)');
-        glow.addColorStop(1, 'rgba(255,230,140,0)');
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, cw, ch);
-        ctx.fillStyle = '#fffbe0';
-        ctx.beginPath();
-        ctx.arc(x, y, cw * 0.085, 0, TAU);
-        ctx.fill();
+        if (weather.disc === 'moon') {
+          for (let i = 0; i < 140; i++) {
+            ctx.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.65})`;
+            ctx.beginPath();
+            ctx.arc(rnd() * cw, rnd() * ch * 0.7, rnd() * 1.3 + 0.4, 0, TAU);
+            ctx.fill();
+          }
+          const glow = ctx.createRadialGradient(x, y, 4, x, y, cw * 0.4);
+          glow.addColorStop(0, 'rgba(200,220,255,0.55)');
+          glow.addColorStop(1, 'rgba(200,220,255,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.fillStyle = '#f3f0d8';
+          ctx.beginPath();
+          ctx.arc(x, y, cw * 0.075, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(190,185,150,0.45)';
+          for (const [dx, dy, r] of [[-0.02, -0.015, 0.016], [0.025, 0.01, 0.02], [-0.01, 0.03, 0.012]]) {
+            ctx.beginPath();
+            ctx.arc(x + dx * cw, y + dy * cw, r * cw, 0, TAU);
+            ctx.fill();
+          }
+        } else {
+          const glow = ctx.createRadialGradient(x, y, 4, x, y, cw * 0.42);
+          glow.addColorStop(0, 'rgba(255,248,200,0.95)');
+          glow.addColorStop(0.25, 'rgba(255,230,140,0.45)');
+          glow.addColorStop(1, 'rgba(255,230,140,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.fillStyle = '#fffbe0';
+          ctx.beginPath();
+          ctx.arc(x, y, cw * 0.085, 0, TAU);
+          ctx.fill();
+        }
       }, { clamp: true });
     } else {
       weather.cache[key] = canvasTex(256, sky(top, mid, bottom), { clamp: true });

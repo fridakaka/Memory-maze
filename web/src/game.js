@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CHARACTERS, makeHero, setAccessory } from './heroes.js';
+import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
   DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, pickLandmarks, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
@@ -42,7 +43,8 @@ let skyTex = null; // sätts av temat
 const lawnColor = new THREE.Color(LAWN);
 scene.background = lawnColor;
 
-scene.add(new THREE.HemisphereLight(0xe6f0ff, 0x6a7a55, 1.35));
+const hemi = new THREE.HemisphereLight(0xe6f0ff, 0x6a7a55, 1.35);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
 sun.position.set(-6, 11, 5);
 sun.castShadow = true;
@@ -75,6 +77,7 @@ let fogSetting = [0xdfe8e1, 4.5, 9.5]; // färg, nära, långt
 /** Byter utseende på väggar, golv och himmel. */
 function applyTheme(t, size) {
   theme = t;
+  setMonster(MONSTER_BY_THEME[t.id] ?? 'classic');
   const a = getAssets(t);
   mats.wallSide.map = a.side;
   mats.wallTop.map = a.top;
@@ -442,45 +445,21 @@ function setHero(id) {
   scene.remove(old);
   scene.add(hero);
   setAccessory(hero, weather.id);
+  attachFlash(weather.id === 'night');
   save.hero = id;
   writeSave();
 }
 
-// Monstret: en stor mörklila klump med horn och stora ögon.
-function makeMonster() {
-  const g = new THREE.Group();
-  const purple = new THREE.MeshLambertMaterial({ color: 0x5b3a8c });
-  const horn = new THREE.MeshLambertMaterial({ color: 0xf0e2c0 });
-  const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const red = new THREE.MeshLambertMaterial({ color: 0xd9304a, emissive: 0x5a0010 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), purple);
-  body.scale.set(1, 0.95, 1);
-  body.position.y = 0.36;
-  g.add(body);
-  for (const s of [-1, 1]) {
-    const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 10), horn);
-    h.position.set(0.17 * s, 0.7, 0.02);
-    h.rotation.z = -0.35 * s;
-    g.add(h);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), white);
-    eye.position.set(0.13 * s, 0.46, 0.27);
-    g.add(eye);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), red);
-    pupil.position.set(0.13 * s, 0.46, 0.35);
-    g.add(pupil);
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), purple);
-    foot.position.set(0.17 * s, 0.07, 0.05);
-    g.add(foot);
-  }
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.05), new THREE.MeshLambertMaterial({ color: 0x1b0f2b }));
-  mouth.position.set(0, 0.27, 0.33);
-  g.add(mouth);
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  g.visible = false;
-  return g;
-}
-const monster = makeMonster();
+// Monstret byts ut efter banans tema.
+let monster = makeMonster('classic');
 scene.add(monster);
+
+function setMonster(kind) {
+  if (monster.userData.kind === kind) return;
+  scene.remove(monster);
+  monster = makeMonster(kind);
+  scene.add(monster);
+}
 
 // ---------- Väder ----------
 let weather = WEATHERS.none;
@@ -608,6 +587,32 @@ function updateFx(dt) {
   fx.obj.geometry.attributes.position.needsUpdate = true;
 }
 
+// Ficklampan på natten: ett ljus som sitter på figuren och en svag stråle.
+// Mjukt ljus som gör att figuren syns i mörkret.
+const glow = new THREE.PointLight(0xffe8b0, 0, 3.2, 1.4);
+glow.position.set(0, 1.1, -0.5);
+const flash = new THREE.SpotLight(0xfff0c0, 0, 11, 0.5, 0.65, 1.1);
+flash.position.set(0.22, 0.42, 0.3);
+const flashTarget = new THREE.Object3D();
+flashTarget.position.set(0.22, 0.1, 4);
+flash.target = flashTarget;
+const beam = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.62, 0.03, 3.2, 20, 1, true).rotateX(Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.06, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+beam.position.set(0.22, 0.42, 1.95);
+beam.rotation.x = -0.12;
+
+function attachFlash(on) {
+  for (const o of [flash, flashTarget, beam]) {
+    if (on) hero.add(o);
+    else hero.remove(o);
+  }
+  flash.intensity = on ? 70 : 0;
+  glow.intensity = on ? 5 : 0;
+  if (on) hero.add(glow);
+  else hero.remove(glow);
+}
+
 /** Sätter vädret för banan: himmel, dimma, ljus, partiklar och figurens tillbehör. */
 function applyWeather(w) {
   weather = w;
@@ -615,8 +620,12 @@ function applyWeather(w) {
   if (sky) skyTex = sky;
   fogSetting = w.fog ?? [theme.fog, ...(theme.fogRange ?? [4.5, 9.5])];
   sun.intensity = w.sun ?? 2.2;
+  sun.color.setHex(w.sunColor ?? 0xfff1d6);
+  hemi.intensity = w.hemi ?? 1.35;
+  hemi.color.setHex(w.hemiColor ?? 0xe6f0ff);
   makeFx(w.fx ?? theme.fx);
   setAccessory(hero, w.id);
+  attachFlash(w.id === 'night');
 }
 
 // ---------- Spelstate ----------
@@ -626,7 +635,7 @@ const S = {
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
   yaw: 0, camYaw: 0, camVel: 0,
-  kind: 'time', uturn: false, mon: null, difficulty: 0, hidden: false,
+  kind: 'time', uturn: false, shake: 0, shakeBurst: 0, vibrateIn: 0, mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
   anim: { t: 0, reaction: null, reactionT: 0, blinkIn: 2, glanceT: -1, glanceIn: 2 },
@@ -657,6 +666,9 @@ function startLevel() {
   const dbgStudy = Number($('dbg-study').value) || 0;
   const dbgTime = Number($('dbg-time').value) || 1;
   S.kind = params.mode;
+  S.shake = 0;
+  S.shakeBurst = 0;
+  S.vibrateIn = 0;
   S.hidden = false;
   hero.visible = true;
   S.difficulty = params.d;
@@ -667,7 +679,8 @@ function startLevel() {
     S.limit = plan.starLimit; // Bara för stjärnorna, ingen tidsgräns.
     S.mon = { plan, delay: plan.delay, awake: false, cell: { ...maze.start }, next: null, t: 0,
       dist: Infinity, map: null, heroKey: '', yaw: 0,
-      mode: 'chase', lostTimer: 0, target: null, tmap: null };
+      mode: 'chase', lostTimer: 0, target: null, tmap: null,
+      pause: 0, peeking: false, targetKind: 'node', peekYaw: 0, lookBase: 0, lookT: 0 };
   } else {
     S.limit = timeLimit(maze, params.d, settings.difficulty, dbgTime);
   }
@@ -849,12 +862,36 @@ function stepRun(dt) {
 // ---------- Monster ----------
 function cellKey(c) { return `${c.x},${c.y}`; }
 
+/** Väljer var monstret letar härnäst: en korsning eller en annan tunna. */
 function pickWanderTarget(m) {
-  const far = [...distances(maze, m.cell)].filter(([, d]) => d >= 5);
-  const pick = far.length ? far[Math.floor(Math.random() * far.length)][0] : cellKey(m.cell);
-  const [x, y] = pick.split(',').map(Number);
-  m.target = { x, y };
-  m.tmap = distances(maze, m.target);
+  const map = distances(maze, m.cell);
+  const junctions = [];
+  for (const [k, d] of map) {
+    if (d < 4 || d > 14) continue;
+    const [x, y] = k.split(',').map(Number);
+    if (openDirs(maze, x, y).length >= 3) junctions.push({ x, y });
+  }
+  // Andra tunnor än den du gömmer dig i
+  const barrels = (maze.spots ?? []).filter((sp) =>
+    !(sp.x === S.node.x && sp.y === S.node.y) && (map.get(`${sp.x},${sp.y}`) ?? 99) <= 18);
+  let target;
+  if (barrels.length && (Math.random() < 0.45 || !junctions.length)) {
+    const sp = barrels[Math.floor(Math.random() * barrels.length)];
+    target = { x: sp.x, y: sp.y };
+    m.targetKind = 'barrel';
+    m.peekYaw = YAW[OPPOSITE[sp.dir]];
+  } else if (junctions.length) {
+    target = junctions[Math.floor(Math.random() * junctions.length)];
+    m.targetKind = 'node';
+  } else {
+    const far = [...map].filter(([, d]) => d >= 5);
+    const pick = far.length ? far[Math.floor(Math.random() * far.length)][0] : cellKey(m.cell);
+    const [x, y] = pick.split(',').map(Number);
+    target = { x, y };
+    m.targetKind = 'node';
+  }
+  m.target = target;
+  m.tmap = distances(maze, target);
 }
 
 function updateMonster(dt) {
@@ -868,6 +905,8 @@ function updateMonster(dt) {
     monster.visible = true;
     monster.position.copy(cellPos(m.cell.x, m.cell.y));
     show($('danger'));
+    S.shakeBurst = 0.7; // ett kort skak när monstret vaknar
+    navigator.vibrate?.(80);
     if (S.hidden) { m.mode = 'lost'; m.lostTimer = 8; }
   }
   // Håll koll på var spelaren är och hur långt monstret har dit.
@@ -890,11 +929,30 @@ function updateMonster(dt) {
     : (lost ? 'Monstret har tappat bort dig. Spring!' : 'Monstret jagar dig!');
 
   let steer = m.map;
+  let moving = true;
   if (lost) {
-    if (!m.tmap || (!m.next && m.cell.x === m.target.x && m.cell.y === m.target.y)) pickWanderTarget(m);
-    steer = m.tmap;
+    if (m.pause > 0) {
+      // Monstret stannar och tittar sig omkring, eller kikar in i en tunna.
+      m.pause -= dt;
+      m.lookT += dt;
+      m.yaw = m.peeking ? m.peekYaw : m.lookBase + Math.sin(m.lookT * 3.2) * 1.1;
+      if (m.pause <= 0) { m.tmap = null; m.peeking = false; }
+      moving = false;
+    } else if (!m.tmap) {
+      pickWanderTarget(m);
+    } else if (!m.next && m.cell.x === m.target.x && m.cell.y === m.target.y) {
+      m.pause = m.targetKind === 'barrel' ? 2.1 : 1.6;
+      m.peeking = m.targetKind === 'barrel';
+      m.lookT = 0;
+      m.lookBase = m.yaw;
+      moving = false;
+    }
+    if (m.tmap) steer = m.tmap;
   }
-  if (!m.next) {
+  if (S.hidden && lost && m.pause > 0) {
+    $('hud-phase').textContent = m.peeking ? 'Monstret kikar in i en tunna…' : 'Monstret tittar sig omkring…';
+  }
+  if (moving && !m.next) {
     const here = steer.get(cellKey(m.cell));
     const d = openDirs(maze, m.cell.x, m.cell.y).find((dir) =>
       steer.get(`${m.cell.x + DELTA[dir].dx},${m.cell.y + DELTA[dir].dy}`) === here - 1);
@@ -904,13 +962,22 @@ function updateMonster(dt) {
       m.yaw = Math.atan2(DELTA[d].dx, DELTA[d].dy);
     }
   }
-  if (m.next) {
+  if (moving && m.next) {
     m.t += m.plan.speed * dt;
     const a = cellPos(m.cell.x, m.cell.y);
     const b = cellPos(m.next.x, m.next.y);
     monster.position.lerpVectors(a, b, Math.min(1, m.t));
     if (m.t >= 1) { m.cell = m.next; m.next = null; }
   }
+  // Förvarning: kameran darrar och skärmen pulserar allt mer ju närmare monstret kommer.
+  const close = !S.hidden && !lost ? Math.max(0, Math.min(1, (8 - m.dist) / 8)) : 0;
+  m.close = close;
+  S.shake += ((close * close * 0.07) - S.shake) * Math.min(1, dt * 4);
+  if (close > 0.6 && S.vibrateIn <= 0) {
+    navigator.vibrate?.(30);
+    S.vibrateIn = 0.7;
+  }
+  S.vibrateIn -= dt;
   const dx = monster.position.x - hero.position.x;
   const dz = monster.position.z - hero.position.z;
   const reach = S.hidden ? (lost ? 0 : 1.2) : 0.55;
@@ -920,11 +987,16 @@ function updateMonster(dt) {
 function animateMonster(dt) {
   if (!monster.visible || !S.mon) return;
   const t = performance.now() / 1000;
-  monster.position.y = Math.abs(Math.sin(t * 9)) * 0.08;
-  monster.rotation.y = lerpAngle(monster.rotation.y, S.mon.yaw, Math.min(1, dt * 10));
+  const m = S.mon;
+  monster.position.y = Math.abs(Math.sin(t * 9)) * 0.08 + (monster.userData.float ?? 0);
+  monster.rotation.y = lerpAngle(monster.rotation.y, m.yaw, Math.min(1, dt * 10));
+  // Lutar sig framåt när det kikar in i en tunna
+  monster.rotation.x += ((m.peeking && m.pause > 0 ? 0.5 : 0) - monster.rotation.x) * Math.min(1, dt * 8);
   monster.scale.set(1 + Math.sin(t * 9) * 0.03, 1 - Math.sin(t * 9) * 0.03, 1);
-  // Röd kant på skärmen när monstret är nära.
-  $('danger').style.opacity = S.phase === 'play' ? S.mon.mode === 'lost' ? 0 : Math.max(0, Math.min(0.7, (6 - S.mon.dist) / 6)) : 0;
+  // Röd kant som pulserar som ett hjärtslag och blir starkare och snabbare ju närmare det är
+  const close = m.mode === 'lost' || S.hidden ? 0 : (m.close ?? 0);
+  const pulse = 0.72 + 0.28 * Math.sin(t * (4 + close * 8));
+  $('danger').style.opacity = S.phase === 'play' ? Math.min(0.75, close * 0.9 * pulse) : 0;
 }
 
 // ---------- Reaktioner ----------
@@ -1038,6 +1110,7 @@ function animateHero(dt) {
   }
   // Tillbehör: paraplyet hålls ut åt sidan och halsduken fladdrar
   if (ud.hold === 'umbrella' && a.reaction !== 'win') arms[1].rotation.set(0, 0, 2.5);
+  if (ud.hold === 'torch' && a.reaction !== 'win') arms[1].rotation.set(-1.4, 0, -0.08);
   for (const f of ud.flutter ?? []) {
     f.mesh.position.y = Math.sin(t * 9 + f.i * 0.9) * 0.02 * (f.i + 1) * (running ? 1.4 : 0.6);
     f.mesh.rotation.y = Math.sin(t * 8 + f.i) * (0.15 + f.i * 0.12);
@@ -1061,6 +1134,12 @@ function placeCamera(blend) {
   const want = pos.clone().addScaledVector(fwd, -3.4);
   want.y = 3.0;
   playCam.position.lerp(want, blend);
+  const shake = S.phase === 'play' ? S.shake + Math.max(0, S.shakeBurst) * 0.1 : 0;
+  if (shake > 0.001) {
+    playCam.position.x += (Math.random() - 0.5) * shake;
+    playCam.position.y += (Math.random() - 0.5) * shake;
+    playCam.position.z += (Math.random() - 0.5) * shake;
+  }
   playCam.lookAt(target);
 }
 
@@ -1271,8 +1350,10 @@ function frame(now) {
   }
 
   if (maze) {
+    S.shakeBurst -= dt;
     updateFade(dt);
     updateFx(dt);
+    beam.visible = weather.id === 'night' && (S.phase === 'play' || S.phase === 'ended');
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster') renderRear();
   }
@@ -1467,7 +1548,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 settings.level = Math.min(TOTAL_LEVELS, Math.max(1, save.level || 1));

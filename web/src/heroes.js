@@ -315,6 +315,15 @@ export function setAccessory(hero, weather) {
     scarf.rotation.x = Math.PI / 2;
     add(hero, scarf);
     add(hero, at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.035), lam(0xe63946)), 0.07, 0.38, -0.15));
+  } else if (weather === 'night') {
+    // Ficklampa i handen. Strålen och ljuset sitter på figuren (se game.js).
+    const torch = new THREE.Group();
+    // Byggd längs armen (-y) så att den pekar framåt när armen sträcks ut.
+    torch.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.03, 0.16, 12), lam(0x2b2f3a)), 0, -0.25, 0));
+    torch.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.055, 0.06, 12), lam(0xffd23f)), 0, -0.36, 0));
+    torch.add(at(sph(0.04, lam(0xfff6c8, 0xffe27a), 1, 0.4, 1), 0, -0.392, 0));
+    add(arms[1], torch);
+    ud.hold = 'torch';
   } else if (weather === 'fog') {
     // Lykta i handen
     const lantern = new THREE.Group();
