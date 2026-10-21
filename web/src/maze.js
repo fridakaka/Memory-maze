@@ -53,6 +53,20 @@ export function levelParams(level) {
   };
 }
 
+/** Sant om en 2x2-ruta har alla fyra inre väggar öppna. */
+function squareIsOpen(open, x, y) {
+  if (x < 0 || y < 0 || y + 1 >= open.length || x + 1 >= open[0].length) return false;
+  return open[y][x].E && open[y][x].S && open[y][x + 1].S && open[y + 1][x].E;
+}
+
+/** Sant om förbindelsen mellan (x1,y1) och (x2,y2) slutar en 2x2-ruta. */
+function makesOpenSquare(open, x1, y1, x2, y2) {
+  const x = Math.min(x1, x2);
+  const y = Math.min(y1, y2);
+  return y1 === y2 ? squareIsOpen(open, x, y) || squareIsOpen(open, x, y - 1)
+    : squareIsOpen(open, x, y) || squareIsOpen(open, x - 1, y);
+}
+
 /** Skapar en labyrint (DFS) med garanterad lösning. */
 export function generateMaze({ width, height, loops = 0, seed = 1 }) {
   const rng = mulberry32(seed);
@@ -96,7 +110,13 @@ export function generateMaze({ width, height, loops = 0, seed = 1 }) {
     const ny = y + DELTA[d].dy;
     if (inside(nx, ny) && !open[y][x][d]) {
       link(x, y, d);
-      i++;
+      // Inga öppna ytor på 2x2 rutor: ta bort förbindelsen om den skapar en.
+      if (makesOpenSquare(open, x, y, nx, ny)) {
+        open[y][x][d] = false;
+        open[ny][nx][OPPOSITE[d]] = false;
+      } else {
+        i++;
+      }
     }
   }
 
