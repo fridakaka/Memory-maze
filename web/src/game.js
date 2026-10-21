@@ -32,7 +32,7 @@ const MAX_LIVES = 5;
 // ---------- three.js ----------
 const canvas = $('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const LAWN = 0x4f6f3f;
@@ -46,7 +46,7 @@ scene.add(new THREE.HemisphereLight(0xe6f0ff, 0x6a7a55, 1.35));
 const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
 sun.position.set(-6, 11, 5);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.left = sun.shadow.camera.bottom = -11;
 sun.shadow.camera.right = sun.shadow.camera.top = 11;
 sun.shadow.camera.near = 1;
@@ -71,8 +71,6 @@ const mats = {
 };
 let theme = THEMES[0];
 let fogSetting = [0xdfe8e1, 4.5, 9.5]; // färg, nära, långt
-// Sidor och ovansida på en vägg: [+x, -x, ovan, under, +z, -z]
-let wallMaterials = [mats.wallSide, mats.wallSide, mats.wallTop, mats.wallSide, mats.wallSide, mats.wallSide];
 
 /** Byter utseende på väggar, golv och himmel. */
 function applyTheme(t, size) {
@@ -103,8 +101,44 @@ window.addEventListener('resize', resize);
 // ---------- Labyrintens 3D-modell ----------
 let maze = null;
 let mazeGroup = null;
-let wallMeshes = [];
-const fading = new Map(); // vägg -> aktuell opacitet
+let walls = []; // { cx, cz, sx, sz } per vägg
+let wallIndex = new Map(); // 'H:x:y' eller 'V:x:y' -> väggens nummer
+let wallSides = null;
+let wallTops = null;
+const cut = new Map(); // väggnummer -> { scale, hold } för väggar som sänks
+const dummy = new THREE.Object3D();
+
+let sideGeo = null;
+/** Enhetslåda utan ovan- och undersida (de ritas separat). */
+function wallSideGeometry() {
+  if (!sideGeo) {
+    const g = new THREE.BoxGeometry(1, 1, 1);
+    const keep = [];
+    for (const grp of g.groups) {
+      if ([0, 1, 4, 5].includes(grp.materialIndex)) {
+        for (let i = grp.start; i < grp.start + grp.count; i++) keep.push(g.index.array[i]);
+      }
+    }
+    g.setIndex(keep);
+    g.clearGroups();
+    sideGeo = g;
+  }
+  return sideGeo;
+}
+let topGeo = null;
+function wallTopGeometry() {
+  if (!topGeo) topGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0.5, 0);
+  return topGeo;
+}
+
+function setWallMatrix(i, scaleY) {
+  const w = walls[i];
+  dummy.position.set(w.cx, (WALL_H * scaleY) / 2, w.cz);
+  dummy.scale.set(w.sx, WALL_H * scaleY, w.sz);
+  dummy.updateMatrix();
+  wallSides.setMatrixAt(i, dummy.matrix);
+  wallTops.setMatrixAt(i, dummy.matrix);
+}
 let pathGroup = null;
 let mapIcons = null;
 const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maze.height / 2 + 0.5);
@@ -112,8 +146,9 @@ const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maz
 function buildMazeMesh() {
   if (mazeGroup) scene.remove(mazeGroup);
   mazeGroup = new THREE.Group();
-  wallMeshes = [];
-  fading.clear();
+  walls = [];
+  wallIndex = new Map();
+  cut.clear();
   S.fadeTargets = null;
   const { width: W, height: H } = maze;
 
@@ -122,27 +157,31 @@ function buildMazeMesh() {
   floor.receiveShadow = true;
   mazeGroup.add(floor);
 
-  const hWall = new THREE.BoxGeometry(1 + WALL_T, WALL_H, WALL_T);
-  const vWall = new THREE.BoxGeometry(WALL_T, WALL_H, 1 + WALL_T);
-  const addWall = (cx, cz, horizontal) => {
-    const m = new THREE.Mesh(horizontal ? hWall : vWall, wallMaterials);
-    m.position.set(cx, WALL_H / 2, cz);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    mazeGroup.add(m);
-    wallMeshes.push(m);
+  // Alla väggar ritas som två instansierade nät (sidor och ovansidor), vilket ger
+  // få ritanrop även på stora banor.
+  const addWall = (cx, cz, horizontal, key) => {
+    wallIndex.set(key, walls.length);
+    walls.push({ cx, cz, sx: horizontal ? 1 + WALL_T : WALL_T, sz: horizontal ? WALL_T : 1 + WALL_T });
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const c = cellPos(x, y);
       const o = maze.open[y][x];
-      if (!o.N) addWall(c.x, c.z - 0.5, true);
-      if (!o.W) addWall(c.x - 0.5, c.z, false);
-      if (x === W - 1 && !o.E) addWall(c.x + 0.5, c.z, false);
+      if (!o.N) addWall(c.x, c.z - 0.5, true, `H:${x}:${y}`);
+      if (!o.W) addWall(c.x - 0.5, c.z, false, `V:${x}:${y}`);
+      if (x === W - 1 && !o.E) addWall(c.x + 0.5, c.z, false, `V:${x + 1}:${y}`);
       // Öppen grind vid starten så att kameran inte hamnar bakom en häck.
-      if (y === H - 1 && !o.S && x !== maze.start.x) addWall(c.x, c.z + 0.5, true);
+      if (y === H - 1 && !o.S && x !== maze.start.x) addWall(c.x, c.z + 0.5, true, `H:${x}:${y + 1}`);
     }
   }
+  wallSides = new THREE.InstancedMesh(wallSideGeometry(), mats.wallSide, walls.length);
+  wallTops = new THREE.InstancedMesh(wallTopGeometry(), mats.wallTop, walls.length);
+  for (let k = 0; k < walls.length; k++) setWallMatrix(k, 1);
+  wallSides.castShadow = true;
+  wallSides.receiveShadow = true;
+  wallTops.receiveShadow = true;
+  wallSides.frustumCulled = wallTops.frustumCulled = false;
+  mazeGroup.add(wallSides, wallTops);
 
   const marker = (cell, mat, geo) => {
     const m = new THREE.Mesh(geo, mat);
@@ -703,6 +742,16 @@ function choose(rel) {
   const pts = [cellPos(S.node.x, S.node.y), ...corridor.cells.map((c) => cellPos(c.x, c.y))];
   S.run = { pts, seg: 0, t: 0, to: corridor.to, heading: corridor.heading, wrong: corridor.wrong, dir };
   S.yaw = YAW[dir];
+  // Vid en vändning klipper vi i stället för att svepa kameran 180 grader.
+  if (rel === 'back' || Math.abs(angleDiff(S.camYaw, S.yaw)) > 2.2) {
+    $('cut').classList.add('on');
+    setTimeout(() => {
+      S.camYaw = S.yaw;
+      S.camVel = 0;
+      placeCamera(1);
+      $('cut').classList.remove('on');
+    }, 110);
+  }
   S.anim.reaction = null;
   refreshControls();
 }
@@ -1001,41 +1050,72 @@ function finish(win, reason = 'time') {
 }
 
 // ---------- Sänk väggar som skymmer ----------
-// Väggen som är i vägen sänks till knähöjd i stället för att bli genomskinlig,
-// så att den fortfarande ser ut som en vägg men figuren syns över den.
-const sightRay = new THREE.Raycaster();
+// Väggarna som är i vägen sänks till knähöjd och stannar nere en stund, så att de
+// inte hoppar upp och ner när kameran rör sig.
 const CUT_SCALE = 0.3;
+const CUT_HOLD = 0.9; // sekunder som en vägg stannar nere
 let fadeTick = 0;
 
+/** Samlar väggarna som en stråle från `from` till `to` går igenom. */
+function sampleWalls(from, to, out) {
+  const dir = to.clone().sub(from);
+  const len = dir.length();
+  const steps = Math.ceil(len / 0.12);
+  const tol = WALL_T / 2 + 0.07;
+  const W = maze.width;
+  const H = maze.height;
+  for (let k = 1; k <= steps; k++) {
+    if ((k / steps) * len > len - 0.25) break;
+    const p = from.clone().addScaledVector(dir, k / steps);
+    if (p.y > WALL_H + 0.05) continue;
+    const u = p.x + W / 2;
+    const v = p.z + H / 2;
+    const j = Math.round(v);
+    if (Math.abs(v - j) < tol) {
+      const id = wallIndex.get(`H:${Math.floor(u)}:${j}`);
+      if (id !== undefined) out.add(id);
+    }
+    const i2 = Math.round(u);
+    if (Math.abs(u - i2) < tol) {
+      const id = wallIndex.get(`V:${i2}:${Math.floor(v)}`);
+      if (id !== undefined) out.add(id);
+    }
+  }
+}
+
 function updateFade(dt) {
-  const targets = new Set();
-  if (S.phase === 'play' && wallMeshes.length) {
+  if (S.phase === 'play' && walls.length) {
     fadeTick = (fadeTick + 1) % 2; // räcker att kolla varannan bildruta
     if (fadeTick === 0) {
       const to = new THREE.Vector3(hero.position.x, 0.5, hero.position.z);
-      const dir = to.clone().sub(playCam.position);
-      const dist = dir.length();
-      sightRay.set(playCam.position, dir.normalize());
-      sightRay.far = Math.max(0, dist - 0.25);
-      for (const hit of sightRay.intersectObjects(wallMeshes, false)) targets.add(hit.object);
-      S.fadeTargets = targets;
+      const from = playCam.position;
+      const side = new THREE.Vector3(to.z - from.z, 0, -(to.x - from.x)).normalize().multiplyScalar(0.22);
+      const hits = new Set();
+      sampleWalls(from, to, hits);
+      sampleWalls(from.clone().add(side), to.clone().add(side), hits);
+      sampleWalls(from.clone().sub(side), to.clone().sub(side), hits);
+      for (const id of hits) {
+        const e = cut.get(id);
+        if (e) e.hold = CUT_HOLD;
+        else cut.set(id, { scale: 1, hold: CUT_HOLD });
+      }
     }
   }
-  const wanted = S.fadeTargets ?? new Set();
-  for (const m of wanted) if (!fading.has(m)) fading.set(m, 1);
-  for (const [m, sc] of fading) {
-    const goal = S.phase === 'play' && wanted.has(m) ? CUT_SCALE : 1;
-    const next = sc + Math.sign(goal - sc) * Math.min(Math.abs(goal - sc), dt * 4);
-    m.scale.y = next;
-    m.position.y = (WALL_H * next) / 2;
-    if (goal === 1 && next >= 0.999) {
-      m.scale.y = 1;
-      m.position.y = WALL_H / 2;
-      fading.delete(m);
+  if (!cut.size) return;
+  for (const [id, e] of cut) {
+    e.hold -= dt;
+    const goal = S.phase === 'play' && e.hold > 0 ? CUT_SCALE : 1;
+    const rate = goal < e.scale ? 6 : 2; // snabbt ner, långsamt upp
+    e.scale += Math.sign(goal - e.scale) * Math.min(Math.abs(goal - e.scale), dt * rate);
+    if (goal === 1 && e.scale >= 0.999) {
+      setWallMatrix(id, 1);
+      cut.delete(id);
     } else {
-      fading.set(m, next);
+      setWallMatrix(id, e.scale);
     }
   }
+  wallSides.instanceMatrix.needsUpdate = true;
+  wallTops.instanceMatrix.needsUpdate = true;
 }
 
 // ---------- Backspegel ----------
@@ -1302,7 +1382,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 settings.level = Math.min(TOTAL_LEVELS, Math.max(1, save.level || 1));

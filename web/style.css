@@ -204,3 +204,7 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
   bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
   width: 56px; height: 56px; font-size: 28px; font-weight: 800;
 }
+
+/* Snabb övertoning vid en vändning, i stället för en lång kamerasväng */
+#cut { position: fixed; inset: 0; background: #10180f; opacity: 0; pointer-events: none; transition: opacity .3s ease-out; }
+#cut.on { opacity: 1; transition: opacity .1s ease-in; }
