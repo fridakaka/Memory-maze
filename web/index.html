@@ -10,7 +10,6 @@
 </head>
 <body>
   <canvas id="scene"></canvas>
-  <div id="cut"></div>
   <div id="danger" class="hidden"></div>
   <div id="rear" class="hidden"><span>Bakom dig</span></div>
 
@@ -85,6 +84,9 @@
       </label>
       <label>Kameravridning (grader/sek, lägre = lugnare)
         <input id="dbg-cam" type="number" min="10" max="360" step="5" value="60">
+      </label>
+      <label>Vändning (grader/sek, högre = snabbare)
+        <input id="dbg-uturn" type="number" min="60" max="720" step="20" value="280">
       </label>
       <label>Tidsgräns, faktor
         <input id="dbg-time" type="number" min="0.3" max="5" step="0.1" value="1">

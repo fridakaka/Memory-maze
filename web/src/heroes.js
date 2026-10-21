@@ -282,15 +282,21 @@ export function setAccessory(hero, weather) {
     const hood = dome(0.268, Math.PI * 0.62, yellow);
     hood.rotation.x = -0.28;
     add(head, hood);
+    // Paraply över huvudet: skaftet i handen, kupolen ovanför huvudet.
     const um = new THREE.Group();
-    um.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.85, 8), lam(0x444444)), 0, 0.42, 0));
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.38, 22, 12, 0, TAU, 0, Math.PI * 0.5), lam(0xe63946));
-    canopy.scale.y = 0.55;
-    canopy.position.y = 0.82;
+    um.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.8, 8), lam(0x444444)), 0, 0.98, 0));
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 12, 0, TAU, 0, Math.PI * 0.5), lam(0xe63946));
+    canopy.scale.y = 0.5;
+    canopy.position.y = 1.34;
     um.add(canopy);
-    um.add(at(sph(0.025, lam(0x444444)), 0, 1.03, 0));
-    um.position.set(0.34, 0.12, 0.02);
-    um.rotation.z = -0.55;
+    for (let k = 0; k < 4; k++) {
+      const stripe = new THREE.Mesh(new THREE.SphereGeometry(0.463, 24, 12, k * (TAU / 4), TAU / 8, 0, Math.PI * 0.5), lam(0xffffff));
+      stripe.scale.y = 0.5;
+      stripe.position.y = 1.34;
+      um.add(stripe);
+    }
+    um.add(at(sph(0.025, lam(0x444444)), 0, 1.58, 0));
+    um.position.set(0.24, 0, 0);
     add(hero, um);
     ud.hold = 'umbrella';
   } else if (weather === 'snow') {

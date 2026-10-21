@@ -469,6 +469,18 @@ const leafTexture = dotTexture((ctx) => {
   ctx.stroke();
 });
 
+const bubbleTexture = dotTexture((ctx) => {
+  ctx.strokeStyle = 'rgba(220,245,255,0.95)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(32, 32, 24, 0, TAU);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(24, 24, 5, 0, TAU);
+  ctx.fill();
+});
+
 const FX_RADIUS = 6;
 const FX_HEIGHT = 6;
 
@@ -482,7 +494,7 @@ function clearFx() {
 function makeFx(kind) {
   clearFx();
   if (!kind) return;
-  const n = kind === 'rain' ? 900 : kind === 'snow' ? 550 : 320;
+  const n = kind === 'rain' ? 900 : kind === 'snow' ? 550 : kind === 'bubbles' ? 160 : 320;
   const p = new Float32Array(n * 3);
   const v = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
@@ -491,6 +503,7 @@ function makeFx(kind) {
     p[i * 3 + 2] = (Math.random() * 2 - 1) * FX_RADIUS;
     if (kind === 'rain') { v[i * 3] = -1.2; v[i * 3 + 1] = -13 - Math.random() * 3; }
     else if (kind === 'snow') { v[i * 3 + 1] = -0.9 - Math.random() * 0.7; }
+    else if (kind === 'bubbles') { v[i * 3 + 1] = 0.6 + Math.random() * 0.9; }
     else { v[i * 3] = 5 + Math.random() * 2; v[i * 3 + 1] = -0.2 - Math.random() * 0.3; }
   }
   const geo = new THREE.BufferGeometry();
@@ -500,9 +513,12 @@ function makeFx(kind) {
     obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xcfe6ff, transparent: true, opacity: 0.65 }));
   } else {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-    obj = new THREE.Points(geo, new THREE.PointsMaterial(kind === 'snow'
+    const matOptions = kind === 'snow'
       ? { map: softDot, size: 0.16, transparent: true, depthWrite: false, color: 0xffffff }
-      : { map: leafTexture, size: 0.2, transparent: true, depthWrite: false, alphaTest: 0.1 }));
+      : kind === 'bubbles'
+        ? { map: bubbleTexture, size: 0.2, transparent: true, depthWrite: false }
+        : { map: leafTexture, size: 0.2, transparent: true, depthWrite: false, alphaTest: 0.1 };
+    obj = new THREE.Points(geo, new THREE.PointsMaterial(matOptions));
   }
   obj.frustumCulled = false;
   obj.visible = false;
@@ -522,6 +538,7 @@ function updateFx(dt) {
   for (let i = 0; i < n; i++) {
     const k = i * 3;
     if (kind === 'snow') v[k] = Math.sin(fx.t * 0.8 + i) * 0.35;
+    if (kind === 'bubbles') v[k] = Math.sin(fx.t * 1.5 + i) * 0.25;
     if (kind === 'wind') v[k + 1] = Math.sin(fx.t * 3 + i) * 0.5;
     p[k] += v[k] * dt;
     p[k + 1] += v[k + 1] * dt;
@@ -547,11 +564,11 @@ function updateFx(dt) {
 /** Sätter vädret för banan: himmel, dimma, ljus, partiklar och figurens tillbehör. */
 function applyWeather(w) {
   weather = w;
-  const sky = getWeatherSky(w);
+  const sky = getWeatherSky(w, window.innerHeight / window.innerWidth);
   if (sky) skyTex = sky;
-  fogSetting = w.fog ?? [theme.fog, 4.5, 9.5];
+  fogSetting = w.fog ?? [theme.fog, ...(theme.fogRange ?? [4.5, 9.5])];
   sun.intensity = w.sun ?? 2.2;
-  makeFx(w.fx);
+  makeFx(w.fx ?? theme.fx);
   setAccessory(hero, w.id);
 }
 
@@ -562,7 +579,7 @@ const S = {
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
   yaw: 0, camYaw: 0, camVel: 0,
-  kind: 'time', mon: null, difficulty: 0, hidden: false,
+  kind: 'time', uturn: false, mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
   anim: { t: 0, reaction: null, reactionT: 0, blinkIn: 2, glanceT: -1, glanceIn: 2 },
@@ -742,16 +759,8 @@ function choose(rel) {
   const pts = [cellPos(S.node.x, S.node.y), ...corridor.cells.map((c) => cellPos(c.x, c.y))];
   S.run = { pts, seg: 0, t: 0, to: corridor.to, heading: corridor.heading, wrong: corridor.wrong, dir };
   S.yaw = YAW[dir];
-  // Vid en vändning klipper vi i stället för att svepa kameran 180 grader.
-  if (rel === 'back' || Math.abs(angleDiff(S.camYaw, S.yaw)) > 2.2) {
-    $('cut').classList.add('on');
-    setTimeout(() => {
-      S.camYaw = S.yaw;
-      S.camVel = 0;
-      placeCamera(1);
-      $('cut').classList.remove('on');
-    }, 110);
-  }
+  // Vid en vändning vrider sig kameran snabbt men mjukt i stället för att svepa långsamt.
+  if (rel === 'back' || Math.abs(angleDiff(S.camYaw, S.yaw)) > 2.2) S.uturn = true;
   S.anim.reaction = null;
   refreshControls();
 }
@@ -981,7 +990,7 @@ function animateHero(dt) {
     }
   }
   // Tillbehör: paraplyet hålls ut åt sidan och halsduken fladdrar
-  if (ud.hold === 'umbrella' && a.reaction !== 'win') arms[1].rotation.set(-0.15, 0, -0.45);
+  if (ud.hold === 'umbrella' && a.reaction !== 'win') arms[1].rotation.set(0, 0, 2.5);
   for (const f of ud.flutter ?? []) {
     f.mesh.position.y = Math.sin(t * 9 + f.i * 0.9) * 0.02 * (f.i + 1) * (running ? 1.4 : 0.6);
     f.mesh.rotation.y = Math.sin(t * 8 + f.i) * (0.15 + f.i * 0.12);
@@ -992,6 +1001,7 @@ function animateHero(dt) {
 function snapCamera() {
   S.camYaw = S.yaw;
   S.camVel = 0;
+  S.uturn = false;
   placeCamera(1);
 }
 
@@ -1170,9 +1180,12 @@ function frame(now) {
     animateHero(dt);
     // Kameran vrider sig mjukt och långsamt efter figuren (mindre åksjuka).
     // Hastigheten är begränsad och accelererar långsamt.
-    const maxRate = ((Number($('dbg-cam').value) || 60) * Math.PI) / 180;
-    const want = Math.max(-maxRate, Math.min(maxRate, angleDiff(S.camYaw, S.yaw) * 1.6));
-    S.camVel += (want - S.camVel) * Math.min(1, dt * 3);
+    const uturnRate = ((Number($('dbg-uturn').value) || 280) * Math.PI) / 180;
+    const maxRate = S.uturn ? uturnRate : ((Number($('dbg-cam').value) || 60) * Math.PI) / 180;
+    const gain = S.uturn ? 5 : 1.6;
+    const want = Math.max(-maxRate, Math.min(maxRate, angleDiff(S.camYaw, S.yaw) * gain));
+    S.camVel += (want - S.camVel) * Math.min(1, dt * (S.uturn ? 9 : 3));
+    if (S.uturn && Math.abs(angleDiff(S.camYaw, S.yaw)) < 0.3) S.uturn = false;
     S.camYaw += S.camVel * dt;
     placeCamera(Math.min(1, dt * 12));
     updateCompass();
