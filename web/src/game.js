@@ -258,8 +258,16 @@ const S = {
 
 function startLevel() {
   const level = settings.level;
-  maze = generateMaze(levelParams(level));
+  const params = levelParams(level);
+  const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
+  if (dbgSize) { params.width = params.height = Math.max(4, Math.min(40, dbgSize)); }
+  maze = generateMaze(params);
   buildMazeMesh();
+  // Skuggkameran ska täcka hela labyrinten, även stora banor.
+  const reach = Math.max(maze.width, maze.height) / 2 + 3;
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -reach;
+  sun.shadow.camera.right = sun.shadow.camera.top = reach;
+  sun.shadow.camera.updateProjectionMatrix();
   fitMapCamera();
 
   const dbgStudy = Number($('dbg-study').value) || 0;

@@ -23,9 +23,11 @@ export function mulberry32(seed) {
 
 const key = (x, y) => `${x},${y}`;
 
+export const MAX_SIZE = 28;
+
 /** Svårighetsparametrar för en nivå (1, 2, 3 ...). */
 export function levelParams(level) {
-  const size = Math.min(5 + Math.floor((level - 1) * 0.7), 13);
+  const size = Math.min(5 + Math.floor((level - 1) * 0.7), MAX_SIZE);
   return {
     width: size,
     height: size + (level > 3 ? 1 : 0),
@@ -171,8 +173,8 @@ export function walkCorridor(maze, from, dir) {
     cells,
     to,
     heading,
-    // Ett felval är en korridor som leder längre bort från målet.
-    wrong: maze.distToGoal.get(key(to.x, to.y)) > maze.distToGoal.get(key(from.x, from.y)),
+    // Ett felval är en korridor som inte tar en närmare målet.
+    wrong: maze.distToGoal.get(key(to.x, to.y)) >= maze.distToGoal.get(key(from.x, from.y)),
   };
 }
 
