@@ -1,10 +1,10 @@
 :root {
-  --bg: #cfe8ef;
-  --ink: #2d3a4a;
-  --accent: #ff8fa3;
-  --accent-ink: #5c1f2c;
-  --card: #fffaf0;
-  --soft: #e9dfc9;
+  --bg: #dfe8d6;
+  --ink: #243225;
+  --accent: #3f7d3a;
+  --accent-ink: #ffffff;
+  --card: #f7f2e6;
+  --soft: #c9c2ac;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -42,19 +42,21 @@ button:disabled { opacity: .3; pointer-events: none; }
   position: fixed; top: 0; left: 0; right: 0;
   padding: calc(env(safe-area-inset-top) + 10px) 16px 0;
   pointer-events: none;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,.55);
 }
 .hud-row { display: flex; justify-content: space-between; font-weight: 700; font-size: 17px; }
-#hud-lives { color: #e0556f; letter-spacing: 2px; }
+#hud-lives { color: #d9534f; letter-spacing: 2px; }
 .bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.65); margin-top: 8px; overflow: hidden; }
-#bar-fill { height: 100%; width: 100%; background: #6ac48a; border-radius: 6px; transition: background .3s; }
-#bar-fill.low { background: #f08a5d; }
+#bar-fill { height: 100%; width: 100%; background: #5aa646; border-radius: 6px; transition: background .3s; }
+#bar-fill.low { background: #e08a3c; }
 #hud-phase { margin-top: 8px; text-align: center; font-weight: 700; font-size: 20px; }
 
 #ready {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom) + 28px);
   background: var(--accent); color: var(--accent-ink);
-  font-weight: 800; font-size: 20px; padding: 16px 36px; box-shadow: 0 4px 0 #e0687f;
+  font-weight: 800; font-size: 20px; padding: 16px 36px; box-shadow: 0 4px 0 #2c5a28;
 }
 
 /* Kompass: syns när figuren står still */
@@ -67,11 +69,11 @@ button:disabled { opacity: .3; pointer-events: none; }
 #needle { width: 100%; height: 100%; position: relative; transition: transform .35s ease; }
 #needle span {
   position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
-  font-weight: 800; font-size: 15px; color: #e0556f;
+  font-weight: 800; font-size: 15px; color: #d9534f;
 }
 #needle::after {
   content: ""; position: absolute; left: 50%; top: 24px; width: 2px; height: 16px;
-  background: #e0556f; transform: translateX(-50%); border-radius: 2px;
+  background: #d9534f; transform: translateX(-50%); border-radius: 2px;
 }
 
 /* Riktningsknappar: fasta platser så tummen lär sig dem */
@@ -89,7 +91,7 @@ button:disabled { opacity: .3; pointer-events: none; }
   position: fixed; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px; padding: 24px 20px; overflow-y: auto;
-  background: rgba(207,232,239,.94);
+  background: rgba(223,232,214,.95);
   text-align: center;
 }
 .panel > * { width: min(100%, 420px); }
@@ -99,7 +101,7 @@ h2 { margin: 12px 0 0; font-size: 14px; text-transform: uppercase; letter-spacin
 .seg { display: flex; gap: 8px; }
 .seg button { flex: 1; font-weight: 700; }
 .seg button small { display: block; font-weight: 400; font-size: 12px; opacity: .75; margin-top: 2px; }
-.seg button.on { background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 #e0687f; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 0 #2c5a28; }
 .stepper { display: flex; align-items: center; justify-content: center; gap: 24px; }
 .stepper button { width: 52px; font-size: 26px; font-weight: 800; }
 #lvl-num { font-size: 36px; font-weight: 800; min-width: 60px; }
@@ -108,7 +110,7 @@ h2 { margin: 12px 0 0; font-size: 14px; text-transform: uppercase; letter-spacin
 .stars .off { color: #fff; opacity: .75; }
 button.primary {
   background: var(--accent); color: var(--accent-ink);
-  font-weight: 800; font-size: 22px; padding: 16px; margin-top: 10px; box-shadow: 0 4px 0 #e0687f;
+  font-weight: 800; font-size: 22px; padding: 16px; margin-top: 10px; box-shadow: 0 4px 0 #2c5a28;
 }
 details { margin-top: 12px; text-align: left; font-size: 14px; }
 details label { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0; }

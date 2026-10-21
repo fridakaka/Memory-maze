@@ -31,12 +31,62 @@ const MAX_LIVES = 5;
 const canvas = $('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-const BG = 0xcfe8ef;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const FOG = 0xdfe8e1;
+const LAWN = 0x4f6f3f;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(BG);
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c9d0, 1.9));
-const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-sun.position.set(4, 9, 6);
+
+function canvasTex(size, draw, repeat = 1) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  t.anisotropy = 4;
+  return t;
+}
+function speckle(ctx, size, base, shades, n, rmin, rmax) {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = shades[Math.floor(Math.random() * shades.length)];
+    ctx.globalAlpha = 0.35 + Math.random() * 0.5;
+    ctx.beginPath();
+    ctx.arc(Math.random() * size, Math.random() * size, rmin + Math.random() * (rmax - rmin), 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+const hedgeTex = canvasTex(256, (c, n) =>
+  speckle(c, n, '#2f6a2b', ['#245a22', '#3b8433', '#4d9b3e', '#68b455', '#1d4a1b'], 1400, 2, 7));
+const gravelTex = canvasTex(256, (c, n) =>
+  speckle(c, n, '#b9ad98', ['#9d917d', '#cdc3b0', '#a79b86', '#d8d0bf', '#8a806e'], 1800, 1, 3), 6);
+const skyTex = canvasTex(256, (c, n) => {
+  const g = c.createLinearGradient(0, 0, 0, n);
+  g.addColorStop(0, '#8fbfe6');
+  g.addColorStop(0.55, '#c9e0ee');
+  g.addColorStop(1, '#e8eee6');
+  c.fillStyle = g;
+  c.fillRect(0, 0, n, n);
+});
+skyTex.wrapS = skyTex.wrapT = THREE.ClampToEdgeWrapping;
+const lawnColor = new THREE.Color(LAWN);
+scene.background = lawnColor;
+
+scene.add(new THREE.HemisphereLight(0xe6f0ff, 0x6a7a55, 1.35));
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
+sun.position.set(-6, 11, 5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = sun.shadow.camera.bottom = -11;
+sun.shadow.camera.right = sun.shadow.camera.top = 11;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 40;
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
 const mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
@@ -44,15 +94,14 @@ const playCam = new THREE.PerspectiveCamera(50, 1, 0.1, 60);
 let camera = mapCam;
 
 const mats = {
-  floor: new THREE.MeshLambertMaterial({ color: 0xf6ecd6 }),
-  wall: new THREE.MeshLambertMaterial({ color: 0x6fb1cf }),
-  wallTop: new THREE.MeshLambertMaterial({ color: 0xa9dbee }),
-  path: new THREE.MeshLambertMaterial({ color: 0xffa7b8 }),
-  start: new THREE.MeshLambertMaterial({ color: 0x7bd389 }),
-  goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x6b4a00 }),
+  floor: new THREE.MeshLambertMaterial({ map: gravelTex }),
+  wall: new THREE.MeshLambertMaterial({ map: hedgeTex }),
+  path: new THREE.MeshLambertMaterial({ color: 0xffe08a, emissive: 0x7a5a10, transparent: true, opacity: 0.85 }),
+  start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
+  goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
 };
-const WALL_H = 0.55;
-const WALL_T = 0.14;
+const WALL_H = 1.2;
+const WALL_T = 0.34;
 
 function resize() {
   const w = window.innerWidth;
@@ -75,21 +124,19 @@ function buildMazeMesh() {
   mazeGroup = new THREE.Group();
   const { width: W, height: H } = maze;
 
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.2, H + 0.4), mats.floor);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.2, H + 1.2), mats.floor);
   floor.position.y = -0.1;
+  floor.receiveShadow = true;
   mazeGroup.add(floor);
 
   const hWall = new THREE.BoxGeometry(1 + WALL_T, WALL_H, WALL_T);
   const vWall = new THREE.BoxGeometry(WALL_T, WALL_H, 1 + WALL_T);
-  const hTop = new THREE.BoxGeometry(1 + WALL_T, 0.03, WALL_T);
-  const vTop = new THREE.BoxGeometry(WALL_T, 0.03, 1 + WALL_T);
   const addWall = (cx, cz, horizontal) => {
     const m = new THREE.Mesh(horizontal ? hWall : vWall, mats.wall);
     m.position.set(cx, WALL_H / 2, cz);
+    m.castShadow = true;
+    m.receiveShadow = true;
     mazeGroup.add(m);
-    const t = new THREE.Mesh(horizontal ? hTop : vTop, mats.wallTop);
-    t.position.set(cx, WALL_H + 0.015, cz);
-    mazeGroup.add(t);
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -98,7 +145,8 @@ function buildMazeMesh() {
       if (!o.N) addWall(c.x, c.z - 0.5, true);
       if (!o.W) addWall(c.x - 0.5, c.z, false);
       if (x === W - 1 && !o.E) addWall(c.x + 0.5, c.z, false);
-      if (y === H - 1 && !o.S) addWall(c.x, c.z + 0.5, true);
+      // Öppen grind vid starten så att kameran inte hamnar bakom en häck.
+      if (y === H - 1 && !o.S && x !== maze.start.x) addWall(c.x, c.z + 0.5, true);
     }
   }
 
@@ -109,7 +157,7 @@ function buildMazeMesh() {
     mazeGroup.add(m);
     return m;
   };
-  marker(maze.start, mats.start, new THREE.CylinderGeometry(0.34, 0.34, 0.04, 28));
+  marker(maze.start, mats.start, new THREE.CylinderGeometry(0.26, 0.26, 0.03, 28));
   const goalMarker = marker(maze.goal, mats.goal, new THREE.CylinderGeometry(0.34, 0.34, 0.05, 5));
   // Mål-stjärna som syns även från snett uppifrån
   const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), mats.goal);
@@ -118,7 +166,7 @@ function buildMazeMesh() {
   mazeGroup.add(star);
 
   pathGroup = new THREE.Group();
-  const tile = new THREE.BoxGeometry(0.62, 0.03, 0.62);
+  const tile = new THREE.BoxGeometry(0.5, 0.03, 0.5);
   for (const c of maze.solution) {
     const m = new THREE.Mesh(tile, mats.path);
     const p = cellPos(c.x, c.y);
@@ -149,43 +197,47 @@ function fitMapCamera() {
 // ---------- Figuren ----------
 function makeHero() {
   const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xffc98b });
-  const cloth = new THREE.MeshLambertMaterial({ color: 0xff8fa3 });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xf2bf94 });
+  const jacket = new THREE.MeshLambertMaterial({ color: 0x2f7be0 });
   const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const dark = new THREE.MeshLambertMaterial({ color: 0x2d3a4a });
+  const jeans = new THREE.MeshLambertMaterial({ color: 0x3b5b8a });
+  const hair = new THREE.MeshLambertMaterial({ color: 0x5a3b24 });
+  const pack = new THREE.MeshLambertMaterial({ color: 0x2b2f3a });
 
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16), cloth);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16), jacket);
   body.scale.set(1, 1.1, 0.95);
   body.position.y = 0.3;
   g.add(body);
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.11), pack);
+  backpack.position.set(0, 0.31, -0.18);
+  g.add(backpack);
 
   const head = new THREE.Group();
   head.position.y = 0.62;
   const skull = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 18), skin);
   head.add(skull);
-  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.215, 24, 12, 0, TAU, 0, Math.PI * 0.42), cloth);
-  hat.position.y = 0.015;
-  head.add(hat);
-  const bobble = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), white);
-  bobble.position.y = 0.23;
-  head.add(bobble);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.218, 24, 14, 0, TAU, 0, Math.PI * 0.55), hair);
+  cap.rotation.x = -0.35;
+  head.add(cap);
   for (const s of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), white);
-    eye.position.set(0.08 * s, -0.01, 0.17);
+    eye.position.set(0.08 * s, -0.03, 0.17);
     head.add(eye);
     const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), dark);
-    pupil.position.set(0.08 * s, -0.01, 0.213);
+    pupil.position.set(0.08 * s, -0.03, 0.213);
     head.add(pupil);
   }
   g.add(head);
 
   const legs = [];
   for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), dark);
+    const leg = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), jeans);
     leg.position.set(0.09 * s, 0.07, 0);
     g.add(leg);
     legs.push(leg);
   }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.userData = { head, body, legs };
   return g;
 }
@@ -233,6 +285,7 @@ function startLevel() {
   // Navigator: ingen markerad väg. Memory: vägen är markerad under studietiden.
   pathGroup.visible = settings.mode === 'memory';
   scene.fog = null;
+  scene.background = lawnColor;
   camera = mapCam;
   S.phase = 'study';
 
@@ -250,7 +303,8 @@ function startLevel() {
 function beginPlay() {
   S.phase = 'play';
   pathGroup.visible = false;
-  scene.fog = new THREE.Fog(BG, 4.5, 8.5);
+  scene.fog = new THREE.Fog(FOG, 4.5, 9.5);
+  scene.background = skyTex;
   camera = playCam;
   show($('ready'), false);
   show($('controls'));
@@ -401,9 +455,9 @@ function snapCamera() {
 function placeCamera(blend) {
   const pos = hero.position;
   const fwd = new THREE.Vector3(Math.sin(S.camYaw), 0, Math.cos(S.camYaw));
-  const target = pos.clone().addScaledVector(fwd, 0.9);
-  const want = pos.clone().addScaledVector(fwd, -2.3);
-  want.y = 4.4;
+  const target = pos.clone().addScaledVector(fwd, 1.0);
+  const want = pos.clone().addScaledVector(fwd, -3.0);
+  want.y = 4.3;
   playCam.position.lerp(want, blend);
   playCam.lookAt(target);
 }
