@@ -457,9 +457,10 @@ function placeCamera(blend) {
   // Följ figurens plats på marken, inte dess studsande löpsteg.
   const pos = new THREE.Vector3(hero.position.x, 0, hero.position.z);
   const fwd = new THREE.Vector3(Math.sin(S.camYaw), 0, Math.cos(S.camYaw));
-  const target = pos.clone().addScaledVector(fwd, 1.0);
-  const want = pos.clone().addScaledVector(fwd, -3.0);
-  want.y = 4.3;
+  const target = pos.clone().addScaledVector(fwd, 1.3);
+  target.y = 0.55;
+  const want = pos.clone().addScaledVector(fwd, -3.4);
+  want.y = 3.0;
   playCam.position.lerp(want, blend);
   playCam.lookAt(target);
 }
