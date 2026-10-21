@@ -136,11 +136,66 @@ export function generateMaze({ width, height, loops = 0, seed = 1 }) {
       }
     }
   }
+  return finalizeMaze(maze, start, goal);
+}
+
+/** Sätter start och mål och räknar ut avstånd till målet och kortaste vägen. */
+export function finalizeMaze(maze, start, goal) {
   maze.start = start;
   maze.goal = goal;
   maze.distToGoal = distances(maze, goal);
   maze.solution = shortestPath(maze, start, goal);
   return maze;
+}
+
+/**
+ * Banor som data. Varje cell skrivs som en siffra: 1 = öppet åt öster, 2 = öppet åt
+ * söder (summan om båda). Väster och norr följer av grannarna.
+ */
+export function encodeMaze(maze) {
+  const rows = [];
+  for (let y = 0; y < maze.height; y++) {
+    let row = '';
+    for (let x = 0; x < maze.width; x++) {
+      const o = maze.open[y][x];
+      row += (o.E ? 1 : 0) + (o.S ? 2 : 0);
+    }
+    rows.push(row);
+  }
+  return { width: maze.width, height: maze.height, cells: rows, start: maze.start, goal: maze.goal };
+}
+
+export function decodeMaze(data) {
+  const { width, height } = data;
+  const open = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ N: false, E: false, S: false, W: false })));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = Number(data.cells[y][x]);
+      if (v & 1 && x + 1 < width) { open[y][x].E = true; open[y][x + 1].W = true; }
+      if (v & 2 && y + 1 < height) { open[y][x].S = true; open[y + 1][x].N = true; }
+    }
+  }
+  return finalizeMaze({ width, height, open }, { ...data.start }, { ...data.goal });
+}
+
+/** Bygger en bana för hand: varje stig är en lista av celler som förbinds i tur och ordning. */
+export function mazeFromPaths(width, height, paths) {
+  const open = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ N: false, E: false, S: false, W: false })));
+  for (const path of paths) {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const [x, y] = path[i];
+      const [nx, ny] = path[i + 1];
+      const d = DIRS.find((dir) => DELTA[dir].dx === nx - x && DELTA[dir].dy === ny - y);
+      if (!d) throw new Error(`Cellerna ${x},${y} och ${nx},${ny} ligger inte bredvid varandra`);
+      open[y][x][d] = true;
+      open[ny][nx][OPPOSITE[d]] = true;
+    }
+  }
+  const [sx, sy] = paths[0][0];
+  const [gx, gy] = paths[0].at(-1);
+  return finalizeMaze({ width, height, open }, { x: sx, y: sy }, { x: gx, y: gy });
 }
 
 export function openDirs(maze, x, y) {

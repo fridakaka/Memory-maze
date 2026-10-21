@@ -1,6 +1,7 @@
 // Banornas utseende: väggar, golv och himmel. Varje bana får ett tema.
 import * as THREE from '../vendor/three.module.min.js';
 import { mulberry32 } from './maze.js';
+import { themeIdFor, weatherIdFor } from './plan.js';
 
 const TAU = Math.PI * 2;
 
@@ -842,27 +843,10 @@ export const THEMES = [
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
 ];
 
-/** Tema för en bana. Alla teman återkommer jämnt och samma tema kommer aldrig två gånger i rad. */
-export function themeFor(level) {
-  const n = THEMES.length;
-  const order = (block) => {
-    const rng = mulberry32(block * 2654435761 + 99);
-    const arr = THEMES.map((_, i) => i);
-    for (let i = n - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  };
-  const block = Math.floor((level - 1) / n);
-  let arr = order(block);
-  // Första banan är alltid den klassiska häcken.
-  if (block === 0) arr = [0, ...arr.filter((i) => i !== 0)];
-  if (block > 0) {
-    const prevLast = order(block - 1).at(-1);
-    if (arr[0] === prevLast) [arr[0], arr[1]] = [arr[1], arr[0]];
-  }
-  return THEMES[arr[(level - 1) % n]];
+/** Tema för en bana (id kommer från planeringen, eller direkt från banans data). */
+export function themeFor(level, id = null) {
+  const wanted = id ?? themeIdFor(level);
+  return THEMES.find((t) => t.id === wanted) ?? THEMES[0];
 }
 
 /** Skapar texturerna första gången de behövs. */
@@ -897,18 +881,9 @@ export const WEATHERS = {
   wind: { id: 'wind', name: 'Blåst', emoji: '💨', fx: 'wind', sun: 2.0, fog: null, sky: ['#7fb0d8', '#bcd6e8', '#e1ebe9'] },
 };
 
-/** Väder för en bana. De första banorna har alltid sol och inomhusteman har inget väder. */
-export function weatherFor(level, theme) {
-  if (theme.noWeather) return WEATHERS.none;
-  if (level <= 3) return WEATHERS.sun;
-  const r = mulberry32(level * 40503 + 11)();
-  if (r < 0.3) return WEATHERS.sun;
-  // Det regnar inte i ett snölandskap.
-  if (r < 0.45) return theme.id === 'snow' ? WEATHERS.snow : WEATHERS.rain;
-  if (r < 0.57) return WEATHERS.snow;
-  if (r < 0.69) return WEATHERS.fog;
-  if (r < 0.8) return WEATHERS.wind;
-  return WEATHERS.night;
+/** Väder för en bana (id kommer från planeringen, eller direkt från banans data). */
+export function weatherFor(level, theme, id = null) {
+  return WEATHERS[id ?? weatherIdFor(level, theme.id)] ?? WEATHERS.sun;
 }
 
 /**

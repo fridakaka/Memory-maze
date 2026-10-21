@@ -24,6 +24,8 @@
     <div id="hud-phase">Studera kartan</div>
   </div>
 
+  <button id="leave" class="round hidden" aria-label="Lämna banan">✕</button>
+  <div id="hint" class="hidden"></div>
   <button id="ready" class="hidden">Jag är redo</button>
   <button id="back-study" class="round hidden" aria-label="Tillbaka till menyn">←</button>
 
@@ -106,6 +108,18 @@
     <p id="hero-stars" class="tag"></p>
     <div id="hero-grid" class="hero-grid"></div>
     <button id="hero-close" class="primary">Klar</button>
+  </div>
+
+  <!-- Förklaringar och frågor -->
+  <div id="dialog" class="hidden">
+    <div class="dialog-card">
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-text"></p>
+      <div class="dialog-buttons">
+        <button id="dialog-secondary" class="hidden"></button>
+        <button id="dialog-primary" class="primary">Okej</button>
+      </div>
+    </div>
   </div>
 
   <!-- Resultat -->

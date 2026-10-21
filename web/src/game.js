@@ -3,9 +3,10 @@ import { CHARACTERS, makeHero, setAccessory, setHelmet } from './heroes.js';
 import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
-  DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, pickLandmarks, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
-  timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
+  DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
+  timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
+import { buildLevel, levelInfo, levelCount, introIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
 const $ = (id) => document.getElementById(id);
@@ -213,6 +214,15 @@ function buildMazeMesh() {
       if (x === W - 1 && !o.E) addWall(c.x + 0.5, c.z, false, `V:${x + 1}:${y}`);
       // Öppen grind vid starten så att kameran inte hamnar bakom en häck.
       if (y === H - 1 && !o.S && x !== maze.start.x) addWall(c.x, c.z + 0.5, true, `H:${x}:${y + 1}`);
+    }
+  }
+  // Celler utan öppningar (i handbyggda banor) blir solida häckblock.
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!openDirs(maze, x, y).length) {
+        const c = cellPos(x, y);
+        walls.push({ cx: c.x, cz: c.z, sx: 1, sz: 1 });
+      }
     }
   }
   wallSides = new THREE.InstancedMesh(wallSideGeometry(), mats.wallSide, walls.length);
@@ -657,14 +667,14 @@ function startLevel() {
   writeSave();
   show($('sheet-settings'), false);
   show($('sheet-hero'), false);
-  const params = levelParams(level);
   const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
-  if (dbgSize) { params.width = params.height = Math.max(4, Math.min(40, dbgSize)); }
-  maze = generateMaze(params);
-  maze.spots = params.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
-  maze.landmarks = pickLandmarks(maze, params.d, params.seed, maze.spots);
-  applyTheme(themeFor(level), Math.max(maze.width, maze.height));
-  applyWeather(weatherFor(level, theme));
+  const L = buildLevel(level, dbgSize ? Math.max(4, Math.min(40, dbgSize)) : 0);
+  maze = L.maze;
+  S.intro = L.intro;
+  S.levelId = level;
+  S.modeNow = L.intro?.forceMode ?? settings.mode;
+  applyTheme(themeFor(level, L.themeId), Math.max(maze.width, maze.height));
+  applyWeather(weatherFor(level, theme, L.weatherId));
   buildMazeMesh();
   // Skuggkameran ska täcka hela labyrinten, även stora banor.
   const reach = Math.max(maze.width, maze.height) / 2 + 3;
@@ -675,29 +685,34 @@ function startLevel() {
 
   const dbgStudy = Number($('dbg-study').value) || 0;
   const dbgTime = Number($('dbg-time').value) || 1;
-  S.kind = params.mode;
+  S.kind = L.mode;
   S.shake = 0;
   S.shakeBurst = 0;
   S.vibrateIn = 0;
   S.hidden = false;
+  S.paused = false;
   hero.visible = true;
-  S.difficulty = params.d;
+  S.difficulty = L.d;
   monster.visible = false;
   S.mon = null;
   if (S.kind === 'monster') {
-    const plan = monsterPlan(maze, params.d, settings.difficulty, dbgTime);
+    const plan = L.intro
+      ? { delay: L.plan.delay ?? 6, speed: L.plan.monsterSpeed, starLimit: L.plan.starLimit ?? 40 }
+      : monsterPlan(maze, L.d, settings.difficulty, dbgTime);
     S.limit = plan.starLimit; // Bara för stjärnorna, ingen tidsgräns.
     S.mon = { plan, delay: plan.delay, awake: false, cell: { ...maze.start }, next: null, t: 0,
       dist: Infinity, map: null, heroKey: '', yaw: 0,
       mode: 'chase', lostTimer: 0, target: null, tmap: null,
       pause: 0, peeking: false, targetKind: 'node', peekYaw: 0, lookBase: 0, lookT: 0 };
+  } else if (S.kind === 'free') {
+    S.limit = Math.ceil(perfectTime(maze) * 2.5); // Ingen tidsgräns, bara för stjärnorna.
   } else {
-    S.limit = timeLimit(maze, params.d, settings.difficulty, dbgTime);
+    S.limit = L.intro ? L.plan.timeLimit : timeLimit(maze, L.d, settings.difficulty, dbgTime);
   }
   S.timeLeft = S.limit;
   S.elapsed = 0;
   S.wrongTurns = 0;
-  S.studyTotal = dbgStudy || STUDY_SECONDS[settings.difficulty];
+  S.studyTotal = dbgStudy || L.intro?.studySeconds || STUDY_SECONDS[settings.difficulty];
   S.studyLeft = S.studyTotal;
   S.node = { ...maze.start };
   S.heading = openDirs(maze, maze.start.x, maze.start.y)[0];
@@ -705,6 +720,17 @@ function startLevel() {
   S.yaw = YAW[S.heading];
   S.camYaw = S.yaw;
   S.anim.reaction = null;
+  S.visits = {};
+  S.guide = null;
+  S.coachDone = new Set();
+  S.coachQueue = [];
+  S.compassSeen = false;
+  S.barrelSeen = false;
+  highlight(null);
+  show($('dialog'), false);
+  show($('leave'), false);
+  show($('hint'), false);
+  dialogHandlers = null;
 
   const p = cellPos(S.node.x, S.node.y);
   hero.position.copy(p);
@@ -712,7 +738,7 @@ function startLevel() {
   hero.scale.set(1, 1, 1);
 
   // Navigator: ingen markerad väg. Memory: vägen är markerad under studietiden.
-  pathGroup.visible = settings.mode === 'memory';
+  pathGroup.visible = S.modeNow === 'memory';
   mapIcons.visible = true;
   scene.fog = null;
   scene.background = lawnColor;
@@ -728,11 +754,13 @@ function startLevel() {
   show($('compass'), false);
   show($('rear'), false);
   const wIcon = weather.emoji ? ` ${weather.emoji}` : '';
-  $('hud-level').textContent = (S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`) + wIcon;
+  const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}` : `Bana ${level}`;
+  $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   show($('danger'), false);
-  const study = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
+  const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
   $('hud-phase').textContent = S.kind === 'monster' ? `${study} – tunnor är gömställen` : study;
   updateHud();
+  coach('study');
 }
 
 function beginPlay() {
@@ -747,8 +775,10 @@ function beginPlay() {
   show($('controls'));
   show($('rear'), S.kind === 'monster');
   $('hud-phase').textContent = S.kind === 'monster' ? 'Monstret vaknar snart' : 'Spring!';
+  show($('leave'));
   snapCamera();
   arriveAtNode(false);
+  coach('play');
 }
 
 function updateHud() {
@@ -757,6 +787,7 @@ function updateHud() {
   let frac;
   if (S.phase === 'study') frac = S.studyLeft / S.studyTotal;
   else if (S.kind === 'monster') frac = S.mon && S.mon.awake && S.mon.mode !== 'lost' ? Math.min(1, S.mon.dist / 10) : 1;
+  else if (S.kind === 'free') frac = 1;
   else frac = Math.max(0, S.timeLeft / S.limit);
   $('bar-fill').style.width = `${frac * 100}%`;
   $('bar-fill').classList.toggle('low', frac < 0.25);
@@ -769,13 +800,83 @@ function availableRel() {
   return rels;
 }
 
+// ---------- Förklaringar (introduktionsbanorna) ----------
+const HIGHLIGHT = {
+  ready: '#ready', controls: '#controls', back: '#controls [data-rel="back"]', compass: '#compass',
+  bar: '.bar', rear: '#rear', hide: '#hide', unhide: '#unhide', phase: '#hud-phase',
+};
+
+function highlight(name) {
+  for (const el of document.querySelectorAll('.coach-hi')) el.classList.remove('coach-hi');
+  if (name && HIGHLIGHT[name]) document.querySelector(HIGHLIGHT[name])?.classList.add('coach-hi');
+}
+
+let dialogHandlers = null;
+
+/** Visar en ruta med text och en eller två knappar. Spelet pausas medan den visas. */
+function showDialog({ title, text, primary = 'Okej', secondary = null, onPrimary = null, onSecondary = null, hi = null }) {
+  $('dialog-title').textContent = title ?? '';
+  show($('dialog-title'), !!title);
+  $('dialog-text').textContent = text;
+  $('dialog-primary').textContent = primary;
+  show($('dialog-secondary'), !!secondary);
+  if (secondary) $('dialog-secondary').textContent = secondary;
+  dialogHandlers = { onPrimary, onSecondary };
+  S.paused = true;
+  highlight(hi);
+  show($('dialog'));
+}
+
+function closeDialog(which) {
+  const h = dialogHandlers;
+  dialogHandlers = null;
+  show($('dialog'), false);
+  highlight(null);
+  S.paused = false;
+  (which === 'secondary' ? h?.onSecondary : h?.onPrimary)?.();
+}
+$('dialog-primary').onclick = () => closeDialog('primary');
+$('dialog-secondary').onclick = () => closeDialog('secondary');
+
+/** Köar förklaringar som hör till ett tillfälle och visar dem en i taget. */
+function coach(when) {
+  if (!S.intro) return;
+  S.intro.steps.forEach((step, i) => {
+    if (step.when === when && !S.coachDone.has(i)) {
+      S.coachDone.add(i);
+      S.coachQueue.push(step);
+    }
+  });
+  nextCoach();
+}
+
+function nextCoach() {
+  if (dialogHandlers || !S.coachQueue.length) return;
+  const step = S.coachQueue.shift();
+  showDialog({ title: S.intro.title, text: step.text, hi: step.hi, onPrimary: nextCoach });
+}
+
+/** Vid en korsning kan banan peka ut vilken pil man ska trycka på. */
+function applyGuide() {
+  S.guide = null;
+  if (!S.intro) return;
+  const key = `${S.node.x},${S.node.y}`;
+  S.visits[key] = (S.visits[key] ?? 0) + 1;
+  const g = S.intro.guides.find((x) => x.x === S.node.x && x.y === S.node.y);
+  if (!g) return;
+  const dir = g.dirs[Math.min(S.visits[key] - 1, g.dirs.length - 1)];
+  S.guide = { rel: relativeDir(S.heading, dir), text: g.text, only: !!g.only };
+}
+
 function arriveAtNode(animate = true) {
   S.run = null;
   const dirs = openDirs(maze, S.node.x, S.node.y);
   const isGoal = S.node.x === maze.goal.x && S.node.y === maze.goal.y;
   if (isGoal) return finish(true);
   react(animate && dirs.length === 1 ? 'deadend' : 'look');
+  applyGuide();
   refreshControls();
+  if (animate && dirs.length === 1) coach('deadend');
 }
 
 function spotHere() {
@@ -786,18 +887,26 @@ function refreshControls() {
   const rels = availableRel();
   for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
     const rel = btn.dataset.rel;
-    btn.disabled = S.phase !== 'play' || S.run !== null || S.hidden || !(rel in rels);
+    const locked = S.guide?.only && S.guide.rel !== rel;
+    btn.disabled = S.phase !== 'play' || S.run !== null || S.hidden || !(rel in rels) || !!locked;
+    btn.classList.toggle('guide', !!S.guide && S.guide.rel === rel && !btn.disabled);
   }
+  // Tips om vilken pil man ska trycka på
+  const hintOn = S.phase === 'play' && S.run === null && !S.hidden && !!S.guide?.text;
+  show($('hint'), hintOn);
+  if (hintOn) $('hint').innerHTML = `<span>${S.guide.text}</span>`;
   const idle = S.phase === 'play' && S.run === null;
   show($('hide'), idle && !S.hidden && !!spotHere());
   show($('unhide'), idle && S.hidden);
   const waiting = S.phase === 'play' && S.run === null;
   show($('compass'), waiting && !S.hidden);
+  if (waiting && !S.hidden && !S.compassSeen) { S.compassSeen = true; coach('compass'); }
+  if (idle && !S.hidden && spotHere() && !S.barrelSeen) { S.barrelSeen = true; coach('barrel'); }
 }
 
 function hide() {
   const spot = spotHere();
-  if (S.phase !== 'play' || S.run || S.hidden || !spot) return;
+  if (S.phase !== 'play' || S.run || S.hidden || !spot || S.paused) return;
   spot.used = true;
   for (const m of spot.mesh.userData.mats) m.color.set(0x8a8f8c);
   S.hidden = true;
@@ -811,6 +920,7 @@ function hide() {
     m.tmap = null;
   }
   refreshControls();
+  coach('hidden');
 }
 
 function unhide() {
@@ -821,7 +931,8 @@ function unhide() {
 }
 
 function choose(rel) {
-  if (S.phase !== 'play' || S.run || S.hidden) return;
+  if (S.phase !== 'play' || S.run || S.hidden || S.paused) return;
+  if (S.guide?.only && S.guide.rel !== rel) return;
   const rels = availableRel();
   if (!(rel in rels)) return;
   const dir = rels[rel];
@@ -917,6 +1028,7 @@ function updateMonster(dt) {
     show($('danger'));
     S.shakeBurst = 0.7; // ett kort skak när monstret vaknar
     navigator.vibrate?.(80);
+    coach('monsterWake');
     if (S.hidden) { m.mode = 'lost'; m.lostTimer = 8; }
   }
   // Håll koll på var spelaren är och hur långt monstret har dit.
@@ -1167,16 +1279,19 @@ function finish(win, reason = 'time') {
   show($('compass'), false);
   show($('danger'), false);
   show($('rear'), false);
+  show($('leave'), false);
+  show($('hint'), false);
   S.hidden = false;
   hero.visible = true;
   const used = S.elapsed;
-  const key = `${settings.mode}:${settings.difficulty}:${settings.level}`;
+  const key = `${S.modeNow}:${settings.difficulty}:${settings.level}`;
 
   let stars = 0;
   if (win) {
     stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
-  } else {
+    if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
+  } else if (!S.intro) {
     save.lives = Math.max(0, save.lives - 1);
   }
   writeSave();
@@ -1188,8 +1303,9 @@ function finish(win, reason = 'time') {
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
       ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval`
-      : save.lives > 0 ? `Du har ${save.lives} liv kvar.` : 'Slut på liv. Du får fem nya.';
-    if (!win && save.lives === 0) { save.lives = MAX_LIVES; writeSave(); }
+      : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
+        : save.lives > 0 ? `Du har ${save.lives} liv kvar.` : 'Slut på liv. Du får fem nya.';
+    if (!win && !S.intro && save.lives === 0) { save.lives = MAX_LIVES; writeSave(); }
     show($('res-next'), win);
     show($('result'));
   }, win ? 1400 : 1200);
@@ -1313,7 +1429,7 @@ function renderRear() {
 // ---------- Huvudloop ----------
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = S.paused ? 0 : Math.min(0.05, (now - last) / 1000);
   last = now;
 
   if (S.phase === 'study') {
@@ -1371,15 +1487,21 @@ function frame(now) {
 }
 
 // ---------- Menyer och input ----------
-const TOTAL_LEVELS = 60;
+/** Alla banor i kartan, nerifrån: introduktionsbanorna först, sedan de vanliga. */
+function levelOrder() {
+  const ids = [...introIds()];
+  const n = levelCount();
+  for (let l = 1; l <= n; l++) ids.push(l);
+  return ids;
+}
 
-/** Typ och namn på en bana, till kartan. */
+/** Typ och namn på en bana, till kartan. Betyget från banans analys används om det finns. */
 function levelType(level) {
-  const p = levelParams(level);
+  const p = levelInfo(level);
+  if (p.intro) return { key: 'intro', label: 'Introduktion', p };
   if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
-  if (p.d < 0.35) return { key: 'easy', label: 'Lätt', p };
-  if (p.d < 0.65) return { key: 'mid', label: 'Medel', p };
-  return { key: 'hard', label: 'Svår', p };
+  const band = p.label ?? (p.d < 0.35 ? 'easy' : p.d < 0.65 ? 'mid' : 'hard');
+  return { key: band, label: { easy: 'Lätt', mid: 'Medel', hard: 'Svår' }[band], p };
 }
 
 function bestStars(level) {
@@ -1392,7 +1514,7 @@ function bestStars(level) {
 
 function totalStars() {
   let sum = 0;
-  for (let l = 1; l <= TOTAL_LEVELS; l++) sum += bestStars(l);
+  for (let l = 1; l <= levelCount(); l++) sum += bestStars(l);
   return sum;
 }
 
@@ -1406,11 +1528,10 @@ function renderMap(scroll = false) {
   const map = $('map');
   const inner = $('map-inner');
   const W = map.clientWidth || window.innerWidth;
-  const H = TOTAL_LEVELS * ROW + 220;
-  const pos = [];
-  for (let i = 1; i <= TOTAL_LEVELS; i++) {
-    pos.push({ x: W / 2 + W * 0.26 * Math.sin(i * 0.9), y: H - 110 - (i - 1) * ROW });
-  }
+  const ids = levelOrder();
+  const total = ids.length;
+  const H = total * ROW + 220;
+  const pos = ids.map((_, k) => ({ x: W / 2 + W * 0.26 * Math.sin((k + 1) * 0.9), y: H - 110 - k * ROW }));
   inner.style.height = `${H}px`;
 
   // Grusgången som slingrar mellan banorna
@@ -1426,16 +1547,16 @@ function renderMap(scroll = false) {
   </svg>`;
 
   // Häckar och träd vid sidan om gången
-  for (let i = 1; i <= TOTAL_LEVELS; i++) {
-    const p = pos[i - 1];
+  for (let k = 0; k < total; k++) {
+    const p = pos[k];
     for (let n = 0; n < 2; n++) {
-      const r = hash(i * 7 + n);
+      const r = hash((k + 1) * 7 + n);
       const onRight = p.x < W / 2 ? n === 0 : n === 1;
       const room = onRight ? W - p.x - 70 : p.x - 70;
       if (room < 50) continue;
       const x = onRight ? p.x + 60 + r * (room - 40) : p.x - 60 - r * (room - 40) - 40;
-      const y = p.y - 40 + hash(i * 13 + n) * 80;
-      if (hash(i * 3 + n) < 0.5) {
+      const y = p.y - 40 + hash((k + 1) * 13 + n) * 80;
+      if (hash((k + 1) * 3 + n) < 0.5) {
         html += `<div class="deco hedge" style="left:${x}px;top:${y}px;width:${40 + r * 40}px;height:${22 + r * 8}px"></div>`;
       } else {
         html += `<div class="deco tree" style="left:${x}px;top:${y}px"></div>`;
@@ -1443,19 +1564,24 @@ function renderMap(scroll = false) {
     }
   }
 
-  for (let i = 1; i <= TOTAL_LEVELS; i++) {
-    const t = levelType(i);
-    const best = bestStars(i);
-    const sel = i === settings.level;
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${i}" style="left:${pos[i - 1].x}px;top:${pos[i - 1].y}px" aria-label="Bana ${i}, ${t.label}">`
-      + `${i}`
+  const intros = introIds();
+  ids.forEach((id, k) => {
+    const t = levelType(id);
+    const best = bestStars(id);
+    const sel = id === settings.level;
+    const isI = isIntro(id);
+    const number = isI ? intros.indexOf(id) + 1 : id;
+    const done = isI && save.intro?.[id];
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : `Bana ${id}`}, ${t.label}">`
+      + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
+      + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
       + `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span></button>`;
-  }
+  });
   inner.innerHTML = html;
   if (scroll) {
-    const y = pos[settings.level - 1].y;
+    const y = pos[Math.max(0, ids.indexOf(settings.level))].y;
     map.scrollTop = Math.max(0, y - map.clientHeight * 0.55);
   }
 }
@@ -1465,10 +1591,16 @@ function refreshMenu(scroll = false) {
   $('stat-lives').textContent = `❤ ${save.lives}`;
   $('hero-emoji').textContent = heroEmoji();
   const t = levelType(settings.level);
-  const th = themeFor(settings.level);
-  const w = weatherFor(settings.level, th);
-  $('lvl-info').textContent = `Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
-  $('play').textContent = `Spela bana ${settings.level}`;
+  const th = themeFor(settings.level, t.p.themeId);
+  const w = weatherFor(settings.level, th, t.p.weatherId);
+  if (t.p.intro) {
+    const n = introIds().indexOf(settings.level) + 1;
+    $('lvl-info').textContent = `Introduktion ${n}: ${t.p.intro.title} · ${t.p.width}×${t.p.height} rutor`;
+    $('play').textContent = `Spela introduktion ${n}`;
+  } else {
+    $('lvl-info').textContent = `Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
+    $('play').textContent = `Spela bana ${settings.level}`;
+  }
   renderMap(scroll);
 }
 
@@ -1527,9 +1659,20 @@ bindSeg('seg-diff', 'difficulty');
 $('play').onclick = startLevel;
 $('ready').onclick = beginPlay;
 $('res-again').onclick = startLevel;
-$('res-next').onclick = () => { settings.level = Math.min(TOTAL_LEVELS, settings.level + 1); startLevel(); };
+$('res-next').onclick = () => {
+  const ids = levelOrder();
+  const k = ids.indexOf(settings.level);
+  settings.level = ids[Math.min(ids.length - 1, k + 1)];
+  startLevel();
+};
 function backToMenu() {
   S.phase = 'menu';
+  S.paused = false;
+  show($('leave'), false);
+  show($('hint'), false);
+  show($('dialog'), false);
+  highlight(null);
+  dialogHandlers = null;
   show($('result'), false);
   show($('hud'), false);
   show($('ready'), false);
@@ -1540,9 +1683,28 @@ function backToMenu() {
   show($('rear'), false);
 }
 $('res-menu').onclick = backToMenu;
+
+/** Att lämna en bana mitt under spelet kostar ett liv (utom i introduktionen). */
+$('leave').onclick = () => {
+  if (S.phase !== 'play' || dialogHandlers) return;
+  showDialog({
+    title: 'Lämna banan?',
+    text: S.intro ? 'Du kan försöka igen när du vill. Det kostar inget liv i introduktionen.' : 'Du förlorar ett liv om du lämnar nu.',
+    primary: 'Lämna',
+    secondary: 'Fortsätt',
+    onPrimary: () => {
+      if (!S.intro) {
+        save.lives = Math.max(0, save.lives - 1);
+        if (save.lives === 0) save.lives = MAX_LIVES;
+        writeSave();
+      }
+      backToMenu();
+    },
+  });
+};
 $('back-study').onclick = backToMenu;
 $('reset-save').onclick = () => {
-  save.stars = {}; save.lives = MAX_LIVES; save.level = 1; settings.level = 1; writeSave(); refreshMenu(true);
+  save.stars = {}; save.lives = MAX_LIVES; save.level = null; save.intro = {}; settings.level = firstLevel(); writeSave(); refreshMenu(true);
 };
 
 for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
@@ -1552,8 +1714,9 @@ $('hide').onclick = hide;
 $('unhide').onclick = unhide;
 window.addEventListener('keydown', (e) => {
   const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'forward', ArrowDown: 'back' };
-  if (map[e.key]) { e.preventDefault(); choose(map[e.key]); }
-  if (e.key === 'Enter' && S.phase === 'study') beginPlay();
+  if (map[e.key] && !S.paused) { e.preventDefault(); choose(map[e.key]); }
+  if (e.key === 'Enter' && dialogHandlers) closeDialog('primary');
+  else if (e.key === 'Enter' && S.phase === 'study' && !S.paused) beginPlay();
   if (e.key === 'h') (S.hidden ? unhide : hide)();
 });
 
@@ -1561,6 +1724,17 @@ window.addEventListener('keydown', (e) => {
 window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
-settings.level = Math.min(TOTAL_LEVELS, Math.max(1, save.level || 1));
+// Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
+function firstLevel() {
+  const intros = introIds();
+  const wanted = save.level ?? (intros[0] ?? 1);
+  return levelOrder().includes(wanted) ? wanted : 1;
+}
+settings.level = firstLevel();
 refreshMenu(true);
+loadLevelData().then((loaded) => {
+  if (!loaded) return;
+  settings.level = firstLevel();
+  refreshMenu(true);
+});
 requestAnimationFrame(frame);

@@ -208,3 +208,46 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 /* Snabb övertoning vid en vändning, i stället för en lång kamerasväng */
 #cut { position: fixed; inset: 0; background: #10180f; opacity: 0; pointer-events: none; transition: opacity .3s ease-out; }
 #cut.on { opacity: 1; transition: opacity .1s ease-in; }
+
+.node.intro { background: #3a78c8; }
+
+/* Lämna banan */
+#leave {
+  position: fixed; z-index: 3;
+  left: max(16px, env(safe-area-inset-left, 0px)); top: 124px;
+  width: 44px; height: 44px; font-size: 20px; font-weight: 800;
+}
+#rear { top: 176px; }
+
+/* Förklaringsruta */
+#dialog {
+  position: fixed; inset: 0; z-index: 8;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 96px) 20px 20px;
+  background: rgba(10, 20, 10, .35);
+}
+.dialog-card {
+  width: min(100%, 380px); background: var(--card); border-radius: 22px; padding: 18px 18px 16px;
+  box-shadow: 0 6px 0 var(--soft), 0 12px 30px rgba(0,0,0,.35); text-align: center;
+}
+.dialog-card h2 { margin: 0 0 6px; font-size: 20px; text-transform: none; letter-spacing: 0; opacity: 1; }
+.dialog-card p { margin: 0 0 14px; font-size: 17px; line-height: 1.35; }
+.dialog-buttons { display: flex; gap: 10px; }
+.dialog-buttons button { flex: 1; font-weight: 800; }
+.dialog-buttons .primary { margin-top: 0; font-size: 18px; padding: 14px; }
+
+/* Markering av det som förklaras och den pil man ska trycka på */
+.coach-hi { animation: coachPulse 1s ease-in-out infinite; outline: 4px solid #ffd23f; outline-offset: 3px; border-radius: 16px; z-index: 9; }
+@keyframes coachPulse { 50% { outline-color: rgba(255, 210, 63, .25); } }
+#controls button.guide { animation: coachPulse 0.9s ease-in-out infinite; outline: 4px solid #ffd23f; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .coach-hi, #controls button.guide { animation: none; } }
+
+/* Tips ovanför knapparna */
+#hint {
+  position: fixed; left: 0; right: 0; z-index: 4; text-align: center; pointer-events: none;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 232px);
+}
+#hint span {
+  display: inline-block; background: rgba(247, 242, 230, .96); color: var(--ink); font-weight: 800;
+  padding: 8px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,.2);
+}
