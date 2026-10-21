@@ -3,7 +3,7 @@ name: Publicera spelet
 # Publicerar mappen web/ som en webbsida via GitHub Pages.
 on:
   push:
-    branches: [main]
+    branches: [main, claude/confident-fermat-kom554]
   workflow_dispatch:
 
 permissions:
