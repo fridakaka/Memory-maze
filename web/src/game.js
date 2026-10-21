@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.min.js';
+import { CHARACTERS, makeHero } from './heroes.js';
 import {
   DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
@@ -241,54 +242,19 @@ function fitMapCamera() {
 }
 
 // ---------- Figuren ----------
-function makeHero() {
-  const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xf2bf94 });
-  const jacket = new THREE.MeshLambertMaterial({ color: 0x2f7be0 });
-  const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const dark = new THREE.MeshLambertMaterial({ color: 0x2d3a4a });
-  const jeans = new THREE.MeshLambertMaterial({ color: 0x3b5b8a });
-  const hair = new THREE.MeshLambertMaterial({ color: 0x5a3b24 });
-  const pack = new THREE.MeshLambertMaterial({ color: 0x2b2f3a });
-
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16), jacket);
-  body.scale.set(1, 1.1, 0.95);
-  body.position.y = 0.3;
-  g.add(body);
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.11), pack);
-  backpack.position.set(0, 0.31, -0.18);
-  g.add(backpack);
-
-  const head = new THREE.Group();
-  head.position.y = 0.62;
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 18), skin);
-  head.add(skull);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.218, 24, 14, 0, TAU, 0, Math.PI * 0.55), hair);
-  cap.rotation.x = -0.35;
-  head.add(cap);
-  for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), white);
-    eye.position.set(0.08 * s, -0.03, 0.17);
-    head.add(eye);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), dark);
-    pupil.position.set(0.08 * s, -0.03, 0.213);
-    head.add(pupil);
-  }
-  g.add(head);
-
-  const legs = [];
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), jeans);
-    leg.position.set(0.09 * s, 0.07, 0);
-    g.add(leg);
-    legs.push(leg);
-  }
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  g.userData = { head, body, legs };
-  return g;
-}
-const hero = makeHero();
+let hero = makeHero(save.hero || 'kille');
 scene.add(hero);
+
+function setHero(id) {
+  const old = hero;
+  hero = makeHero(id);
+  hero.position.copy(old.position);
+  hero.rotation.copy(old.rotation);
+  scene.remove(old);
+  scene.add(hero);
+  save.hero = id;
+  writeSave();
+}
 
 // Monstret: en stor mörklila klump med horn och stora ögon.
 function makeMonster() {
@@ -336,11 +302,15 @@ const S = {
   kind: 'time', mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
-  anim: { t: 0, reaction: null, reactionT: 0 },
+  anim: { t: 0, reaction: null, reactionT: 0, blinkIn: 2, glanceT: -1, glanceIn: 2 },
 };
 
 function startLevel() {
   const level = settings.level;
+  save.level = level;
+  writeSave();
+  show($('sheet-settings'), false);
+  show($('sheet-hero'), false);
   const params = levelParams(level);
   const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
   if (dbgSize) { params.width = params.height = Math.max(4, Math.min(40, dbgSize)); }
@@ -627,47 +597,103 @@ function react(kind) {
 }
 
 function animateHero(dt) {
-  const { head, body, legs } = hero.userData;
-  S.anim.t += dt;
-  const t = S.anim.t;
+  const { head, body, legs, arms, face, dangles, tail, ears } = hero.userData;
+  const a = S.anim;
+  a.t += dt;
+  const t = a.t;
   const running = S.run !== null;
+  const BODY_Y = 1.08;
 
-  // Lugn grundrörelse
+  // Grundläge som animationerna utgår från
   head.rotation.set(0, 0, 0);
-  body.scale.y = 1.1;
+  body.scale.y = BODY_Y;
   hero.rotation.z = 0;
   hero.rotation.y = lerpAngle(hero.rotation.y, S.yaw, Math.min(1, dt * 14));
+  for (const arm of arms) arm.rotation.set(0, 0, 0);
+  if (tail) tail.rotation.set(0, 0, 0);
+  for (const e of ears) e.rotation.set(0, 0, 0);
+  for (const d of dangles) d.rotation.set(0, 0, 0);
+  face.mouth.rotation.z = Math.PI;
+
+  // Blinkar då och då
+  a.blinkIn -= dt;
+  if (a.blinkIn < -0.12) a.blinkIn = 2 + Math.random() * 3;
+  face.eyes.scale.y = a.blinkIn < 0 ? 0.1 : 1;
 
   if (running) {
     const f = t * 16;
-    hero.position.y = Math.abs(Math.sin(f)) * 0.07;
-    legs[0].position.z = Math.sin(f) * 0.12;
-    legs[1].position.z = -Math.sin(f) * 0.12;
+    const s = Math.sin(f);
+    hero.position.y = Math.abs(s) * 0.07;
+    legs[0].position.z = s * 0.12;
+    legs[1].position.z = -s * 0.12;
     body.rotation.x = 0.12;
+    arms[0].rotation.x = s * 0.9;
+    arms[1].rotation.x = -s * 0.9;
+    for (const d of dangles) d.rotation.x = Math.sin(f + 1) * 0.35;
+    for (const e of ears) e.rotation.x = Math.sin(f) * 0.15;
+    if (tail) tail.rotation.y = Math.sin(t * 14) * 0.5;
+
+    // Tittar bakåt över axeln då och då, så att man ser ansiktet.
+    a.glanceIn -= dt;
+    if (a.glanceT < 0 && a.glanceIn <= 0) a.glanceT = 0;
+    if (a.glanceT >= 0) {
+      a.glanceT += dt;
+      const k = a.glanceT / 1.2;
+      if (k >= 1) {
+        a.glanceT = -1;
+        a.glanceIn = 3 + Math.random() * 3;
+      } else {
+        const bump = Math.min(1, Math.sin(k * Math.PI) * 1.8);
+        head.rotation.y = bump * 2.3;
+        head.rotation.z = bump * 0.12;
+      }
+    }
   } else {
+    a.glanceT = -1;
+    a.glanceIn = 1.5 + Math.random() * 2;
     hero.position.y = 0;
     legs[0].position.z = legs[1].position.z = 0;
     body.rotation.x = 0;
-    const r = S.anim.reaction;
-    S.anim.reactionT += dt;
-    const rt = S.anim.reactionT;
+    for (const d of dangles) d.rotation.x = Math.sin(t * 2) * 0.08;
+    if (tail) tail.rotation.y = Math.sin(t * 5) * 0.3;
+    ears.forEach((e, i) => { e.rotation.z = Math.sin(t * 3 + i * 2) * 0.06; });
+
+    const r = a.reaction;
+    a.reactionT += dt;
+    const rt = a.reactionT;
     if (r === 'look' || r === 'idle') {
-      // Tittar åt vänster och höger. Kliar sig i huvudet om det dröjer.
-      head.rotation.y = Math.sin(rt * 3) * 0.7 * Math.min(1, rt * 2) * (rt < 2.2 ? 1 : 0);
-      if (rt > 4) {
-        head.rotation.z = Math.sin(rt * 14) * 0.12;
-        hero.position.y = Math.abs(Math.sin(rt * 7)) * 0.015;
+      // Tittar åt sidorna, vänder sig mot kameran och vinkar, kliar sig sedan i huvudet.
+      const c = rt % 9;
+      if (c < 2.2) {
+        head.rotation.y = Math.sin(c * 3) * 0.7 * Math.min(1, c * 2);
+      } else if (c < 5.2) {
+        const k = Math.min(1, (c - 2.2) * 2.5);
+        head.rotation.y = k * 2.3;
+        head.rotation.z = k * 0.1;
+        arms[1].rotation.z = (2.5 + Math.sin(c * 11) * 0.35) * k;
+      } else {
+        const k = Math.min(1, (c - 5.2) * 3);
+        head.rotation.z = Math.sin(c * 14) * 0.12 * k;
+        arms[0].rotation.z = -2.3 * k;
+        hero.position.y = Math.abs(Math.sin(c * 7)) * 0.015;
       }
     } else if (r === 'deadend') {
       head.rotation.y = Math.sin(rt * 14) * 0.5 * Math.max(0, 1 - rt);
-      body.scale.y = 1.1 - 0.12 * Math.max(0, 1 - rt);
+      body.scale.y = BODY_Y - 0.12 * Math.max(0, 1 - rt);
+      const k = Math.min(1, rt * 4) * (rt < 1.6 ? 1 : 0);
+      arms[0].rotation.z = -0.9 * k;
+      arms[1].rotation.z = 0.9 * k;
     } else if (r === 'win') {
       hero.position.y = Math.abs(Math.sin(rt * 6)) * 0.35;
       hero.rotation.y += dt * 6;
+      arms[0].rotation.z = -2.7;
+      arms[1].rotation.z = 2.7;
+      if (tail) tail.rotation.y = Math.sin(t * 20) * 0.7;
     } else if (r === 'lose') {
-      body.scale.y = 1.1 - 0.2 * Math.min(1, rt * 2);
+      body.scale.y = BODY_Y - 0.2 * Math.min(1, rt * 2);
       head.rotation.x = 0.45 * Math.min(1, rt * 2);
       hero.rotation.z = Math.sin(rt * 2) * 0.05;
+      face.mouth.rotation.z = 0;
     }
   }
 }
@@ -808,13 +834,146 @@ function frame(now) {
 }
 
 // ---------- Menyer och input ----------
-function refreshMenu() {
-  $('lvl-num').textContent = settings.level;
-  const info = levelParams(settings.level);
-  $('lvl-info').textContent = `${info.mode === 'monster' ? 'Monster' : 'Tidsgräns'} · ${info.width}×${info.height} rutor`;
-  const best = save.stars[`${settings.mode}:${settings.difficulty}:${settings.level}`] || 0;
-  $('lvl-stars').textContent = '★'.repeat(best) + '☆'.repeat(3 - best);
+const TOTAL_LEVELS = 60;
+
+/** Typ och namn på en bana, till kartan. */
+function levelType(level) {
+  const p = levelParams(level);
+  if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
+  if (p.d < 0.35) return { key: 'easy', label: 'Lätt', p };
+  if (p.d < 0.65) return { key: 'mid', label: 'Medel', p };
+  return { key: 'hard', label: 'Svår', p };
 }
+
+function bestStars(level) {
+  let best = 0;
+  for (const [k, v] of Object.entries(save.stars)) {
+    if (Number(k.split(':')[2]) === level) best = Math.max(best, v);
+  }
+  return best;
+}
+
+function totalStars() {
+  let sum = 0;
+  for (let l = 1; l <= TOTAL_LEVELS; l++) sum += bestStars(l);
+  return sum;
+}
+
+const heroUnlocked = (c) => !!save.unlockAll || totalStars() >= c.stars;
+const heroEmoji = () => (CHARACTERS.find((c) => c.id === (save.hero || 'kille')) ?? CHARACTERS[0]).emoji;
+// Deterministisk slump till kartans dekorationer.
+const hash = (n) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+const ROW = 100;
+function renderMap(scroll = false) {
+  const map = $('map');
+  const inner = $('map-inner');
+  const W = map.clientWidth || window.innerWidth;
+  const H = TOTAL_LEVELS * ROW + 220;
+  const pos = [];
+  for (let i = 1; i <= TOTAL_LEVELS; i++) {
+    pos.push({ x: W / 2 + W * 0.26 * Math.sin(i * 0.9), y: H - 110 - (i - 1) * ROW });
+  }
+  inner.style.height = `${H}px`;
+
+  // Grusgången som slingrar mellan banorna
+  let d = `M ${pos[0].x} ${pos[0].y + 60} L ${pos[0].x} ${pos[0].y}`;
+  for (let k = 1; k < pos.length - 1; k++) {
+    d += ` Q ${pos[k].x} ${pos[k].y} ${(pos[k].x + pos[k + 1].x) / 2} ${(pos[k].y + pos[k + 1].y) / 2}`;
+  }
+  d += ` L ${pos[pos.length - 1].x} ${pos[pos.length - 1].y}`;
+  let html = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="#4d6b36" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${d}" fill="none" stroke="#b9ad98" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${d}" fill="none" stroke="#d8d0bf" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/>
+  </svg>`;
+
+  // Häckar och träd vid sidan om gången
+  for (let i = 1; i <= TOTAL_LEVELS; i++) {
+    const p = pos[i - 1];
+    for (let n = 0; n < 2; n++) {
+      const r = hash(i * 7 + n);
+      const onRight = p.x < W / 2 ? n === 0 : n === 1;
+      const room = onRight ? W - p.x - 70 : p.x - 70;
+      if (room < 50) continue;
+      const x = onRight ? p.x + 60 + r * (room - 40) : p.x - 60 - r * (room - 40) - 40;
+      const y = p.y - 40 + hash(i * 13 + n) * 80;
+      if (hash(i * 3 + n) < 0.5) {
+        html += `<div class="deco hedge" style="left:${x}px;top:${y}px;width:${40 + r * 40}px;height:${22 + r * 8}px"></div>`;
+      } else {
+        html += `<div class="deco tree" style="left:${x}px;top:${y}px"></div>`;
+      }
+    }
+  }
+
+  for (let i = 1; i <= TOTAL_LEVELS; i++) {
+    const t = levelType(i);
+    const best = bestStars(i);
+    const sel = i === settings.level;
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${i}" style="left:${pos[i - 1].x}px;top:${pos[i - 1].y}px" aria-label="Bana ${i}, ${t.label}">`
+      + `${i}`
+      + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
+      + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
+      + `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span></button>`;
+  }
+  inner.innerHTML = html;
+  if (scroll) {
+    const y = pos[settings.level - 1].y;
+    map.scrollTop = Math.max(0, y - map.clientHeight * 0.55);
+  }
+}
+
+function refreshMenu(scroll = false) {
+  $('stat-stars').textContent = `★ ${totalStars()}`;
+  $('stat-lives').textContent = `❤ ${save.lives}`;
+  $('hero-emoji').textContent = heroEmoji();
+  const t = levelType(settings.level);
+  const modeText = settings.mode === 'memory' ? 'Memory' : 'Navigator';
+  $('lvl-info').textContent = `Bana ${settings.level} · ${t.label} · ${t.p.width}×${t.p.height} rutor · ${modeText}`;
+  $('play').textContent = `Spela bana ${settings.level}`;
+  renderMap(scroll);
+}
+
+$('map-inner').addEventListener('click', (e) => {
+  const node = e.target.closest('.node');
+  if (!node) return;
+  settings.level = Number(node.dataset.level);
+  save.level = settings.level;
+  writeSave();
+  refreshMenu();
+});
+
+function renderHeroes(message) {
+  const total = totalStars();
+  $('hero-stars').textContent = message ?? `Du har ${total} ★. Samla stjärnor för att låsa upp fler figurer.`;
+  $('hero-grid').innerHTML = CHARACTERS.map((c) => {
+    const open = heroUnlocked(c);
+    const on = (save.hero || 'kille') === c.id;
+    return `<button class="hero-card${on ? ' on' : ''}${open ? '' : ' locked'}" data-id="${c.id}">`
+      + `<span class="em">${c.emoji}</span>${c.name}`
+      + `<small>${open ? (on ? 'Vald' : '&nbsp;') : `🔒 ${c.stars} ★`}</small></button>`;
+  }).join('');
+}
+
+$('hero-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.hero-card');
+  if (!card) return;
+  const c = CHARACTERS.find((x) => x.id === card.dataset.id);
+  if (!heroUnlocked(c)) {
+    renderHeroes(`${c.name} låses upp med ${c.stars} ★. Du har ${totalStars()}.`);
+    return;
+  }
+  setHero(c.id);
+  renderHeroes();
+  refreshMenu();
+});
+$('hero-btn').onclick = () => { renderHeroes(); show($('sheet-hero')); };
+$('hero-close').onclick = () => show($('sheet-hero'), false);
+$('settings-btn').onclick = () => show($('sheet-settings'));
+$('settings-close').onclick = () => { show($('sheet-settings'), false); refreshMenu(); };
+
+$('dbg-unlock').checked = !!save.unlockAll;
+$('dbg-unlock').onchange = () => { save.unlockAll = $('dbg-unlock').checked; writeSave(); };
 
 function bindSeg(id, field) {
   $(id).addEventListener('click', (e) => {
@@ -822,28 +981,25 @@ function bindSeg(id, field) {
     if (!b) return;
     settings[field] = b.dataset.v;
     for (const x of $(id).children) x.classList.toggle('on', x === b);
-    refreshMenu();
   });
 }
 bindSeg('seg-mode', 'mode');
 bindSeg('seg-diff', 'difficulty');
 
-$('lvl-down').onclick = () => { settings.level = Math.max(1, settings.level - 1); refreshMenu(); };
-$('lvl-up').onclick = () => { settings.level = Math.min(60, settings.level + 1); refreshMenu(); };
 $('play').onclick = startLevel;
 $('ready').onclick = beginPlay;
 $('res-again').onclick = startLevel;
-$('res-next').onclick = () => { settings.level++; startLevel(); };
+$('res-next').onclick = () => { settings.level = Math.min(TOTAL_LEVELS, settings.level + 1); startLevel(); };
 $('res-menu').onclick = () => {
   S.phase = 'menu';
   show($('result'), false);
   show($('hud'), false);
   show($('ready'), false);
   show($('menu'));
-  refreshMenu();
+  refreshMenu(true);
 };
 $('reset-save').onclick = () => {
-  save.stars = {}; save.lives = MAX_LIVES; writeSave(); refreshMenu();
+  save.stars = {}; save.lives = MAX_LIVES; save.level = 1; settings.level = 1; writeSave(); refreshMenu(true);
 };
 
 for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
@@ -859,8 +1015,9 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, hero, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setHero, get hero() { return hero; }, monster, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
-refreshMenu();
+settings.level = Math.min(TOTAL_LEVELS, Math.max(1, save.level || 1));
+refreshMenu(true);
 requestAnimationFrame(frame);

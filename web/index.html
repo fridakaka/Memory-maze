@@ -37,10 +37,28 @@
     <button data-rel="back" aria-label="Vänd tillbaka" class="back">↩ Vänd</button>
   </div>
 
-  <!-- Meny -->
-  <div id="menu" class="panel">
-    <h1>Maze Memory</h1>
-    <p class="tag">Se vägen. Kom ihåg den. Hitta ut.</p>
+  <!-- Meny: bankarta -->
+  <div id="menu" class="menu">
+    <div class="menu-top">
+      <button id="hero-btn" class="round" aria-label="Välj figur"><span id="hero-emoji">👦</span></button>
+      <div class="menu-title">
+        <h1>Maze Memory</h1>
+        <div class="menu-stats"><span id="stat-stars">★ 0</span><span id="stat-lives">❤ 5</span></div>
+      </div>
+      <button id="settings-btn" class="round" aria-label="Inställningar">⚙</button>
+    </div>
+
+    <div id="map" class="map"><div id="map-inner" class="map-inner"></div></div>
+
+    <div class="menu-bottom">
+      <div id="lvl-info" class="info"></div>
+      <button id="play" class="primary">Spela</button>
+    </div>
+  </div>
+
+  <!-- Inställningar -->
+  <div id="sheet-settings" class="panel sheet hidden">
+    <h1>Inställningar</h1>
 
     <h2>Spelläge</h2>
     <div class="seg" id="seg-mode">
@@ -48,30 +66,19 @@
       <button data-v="memory">Memory<small>Vägen är markerad</small></button>
     </div>
 
-    <h2>Svårighet</h2>
+    <h2>Tempo</h2>
     <div class="seg" id="seg-diff">
-      <button data-v="easy">Lätt</button>
-      <button data-v="medium" class="on">Medel</button>
-      <button data-v="hard">Svår</button>
+      <button data-v="easy">Lugnt</button>
+      <button data-v="medium" class="on">Normalt</button>
+      <button data-v="hard">Snabbt</button>
     </div>
-
-    <h2>Bana</h2>
-    <div class="stepper">
-      <button id="lvl-down">−</button>
-      <span id="lvl-num">1</span>
-      <button id="lvl-up">+</button>
-    </div>
-    <div id="lvl-info" class="info"></div>
-    <div id="lvl-stars" class="stars"></div>
-
-    <button id="play" class="primary">Spela</button>
 
     <details>
       <summary>Testinställningar</summary>
       <label>Labyrintstorlek (rutor per sida, 0 = enligt bana)
         <input id="dbg-size" type="number" min="0" max="40" value="0">
       </label>
-      <label>Studietid (sek, 0 = enligt svårighet)
+      <label>Studietid (sek, 0 = enligt tempo)
         <input id="dbg-study" type="number" min="0" max="120" value="0">
       </label>
       <label>Kameravridning (grader/sek, lägre = lugnare)
@@ -80,8 +87,21 @@
       <label>Tidsgräns, faktor
         <input id="dbg-time" type="number" min="0.3" max="5" step="0.1" value="1">
       </label>
+      <label>Lås upp alla figurer
+        <input id="dbg-unlock" type="checkbox">
+      </label>
       <button id="reset-save">Nollställ sparad progress</button>
     </details>
+
+    <button id="settings-close" class="primary">Klar</button>
+  </div>
+
+  <!-- Välj figur -->
+  <div id="sheet-hero" class="panel sheet hidden">
+    <h1>Välj figur</h1>
+    <p id="hero-stars" class="tag"></p>
+    <div id="hero-grid" class="hero-grid"></div>
+    <button id="hero-close" class="primary">Klar</button>
   </div>
 
   <!-- Resultat -->
