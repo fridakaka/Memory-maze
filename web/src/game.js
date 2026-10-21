@@ -250,7 +250,7 @@ const S = {
   node: null, // nuvarande nod {x,y}
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
-  yaw: 0, camYaw: 0,
+  yaw: 0, camYaw: 0, camVel: 0,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
   anim: { t: 0, reaction: null, reactionT: 0 },
@@ -449,11 +449,13 @@ function animateHero(dt) {
 // ---------- Kamera ----------
 function snapCamera() {
   S.camYaw = S.yaw;
+  S.camVel = 0;
   placeCamera(1);
 }
 
 function placeCamera(blend) {
-  const pos = hero.position;
+  // Följ figurens plats på marken, inte dess studsande löpsteg.
+  const pos = new THREE.Vector3(hero.position.x, 0, hero.position.z);
   const fwd = new THREE.Vector3(Math.sin(S.camYaw), 0, Math.cos(S.camYaw));
   const target = pos.clone().addScaledVector(fwd, 1.0);
   const want = pos.clone().addScaledVector(fwd, -3.0);
@@ -528,8 +530,12 @@ function frame(now) {
   if (S.phase !== 'menu' && S.phase !== 'study') {
     animateHero(dt);
     // Kameran vrider sig mjukt och långsamt efter figuren (mindre åksjuka).
-    S.camYaw = lerpAngle(S.camYaw, S.yaw, Math.min(1, dt * 3.2));
-    placeCamera(Math.min(1, dt * 9));
+    // Hastigheten är begränsad och accelererar långsamt.
+    const maxRate = ((Number($('dbg-cam').value) || 60) * Math.PI) / 180;
+    const want = Math.max(-maxRate, Math.min(maxRate, angleDiff(S.camYaw, S.yaw) * 1.6));
+    S.camVel += (want - S.camVel) * Math.min(1, dt * 3);
+    S.camYaw += S.camVel * dt;
+    placeCamera(Math.min(1, dt * 12));
     updateCompass();
   } else if (S.phase === 'study') {
     animateHero(dt);
