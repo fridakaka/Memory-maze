@@ -279,6 +279,70 @@ export function pickHidingSpots(maze, seed) {
   return ends.slice(0, clamp(Math.round(ends.length * 0.2), 1, 5));
 }
 
+export const LANDMARK_TYPES = ['gate', 'tree', 'lantern', 'statue', 'flag', 'sunflower'];
+
+/**
+ * Landmärken som gör banan lättare att minnas ("efter den blå grinden").
+ * Två tredjedelar står längs lösningen, resten vid sidovägar. Alla är olika.
+ * Returnerar { type, x, y, dir, axis }: dir är en stängd sida (häck) som föremålet
+ * står mot, axis är 'x' eller 'z' för grinden (åt vilket håll den spänner).
+ */
+export function pickLandmarks(maze, d, seed, avoid = []) {
+  const rng = mulberry32(seed + 555);
+  const count = clamp(2 + Math.round(d * 4), 2, LANDMARK_TYPES.length);
+  const used = [];
+  const taken = (x, y) => avoid.some((a) => a.x === x && a.y === y) || used.some((u) => Math.abs(u.x - x) + Math.abs(u.y - y) < 4);
+  const onSolution = new Set(maze.solution.map((c) => `${c.x},${c.y}`));
+  const okCell = (x, y) =>
+    !isNode(maze, x, y) && !taken(x, y);
+
+  const picks = [];
+  const nPath = Math.ceil(count * 0.67);
+  const len = maze.solution.length;
+  for (let k = 1; k <= nPath; k++) {
+    const target = Math.round((k * len) / (nPath + 1));
+    for (let off = 0; off <= 3; off++) {
+      const found = [target - off, target + off]
+        .map((i) => maze.solution[i])
+        .find((c) => c && okCell(c.x, c.y));
+      if (found) { picks.push(found); used.push(found); break; }
+    }
+  }
+  const others = [];
+  for (let y = 0; y < maze.height; y++) {
+    for (let x = 0; x < maze.width; x++) {
+      if (!onSolution.has(`${x},${y}`) && !isNode(maze, x, y)) others.push({ x, y });
+    }
+  }
+  for (let tries = 0; picks.length < count && others.length && tries < 200; tries++) {
+    const c = others[Math.floor(rng() * others.length)];
+    if (okCell(c.x, c.y)) { picks.push(c); used.push(c); }
+  }
+
+  // Blanda typerna. Grinden måste stå på en rak korridor.
+  const types = [...LANDMARK_TYPES];
+  for (let i = types.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [types[i], types[j]] = [types[j], types[i]];
+  }
+  const straight = (c) => {
+    const o = openDirs(maze, c.x, c.y);
+    return o.length === 2 && o[0] === OPPOSITE[o[1]];
+  };
+  const result = [];
+  for (const c of picks) {
+    let idx = types.findIndex((t) => t !== 'gate' || straight(c));
+    if (idx < 0) idx = 0;
+    const type = types.splice(idx, 1)[0];
+    const o = openDirs(maze, c.x, c.y);
+    const closed = DIRS.filter((dir) => !o.includes(dir));
+    const dir = closed[Math.floor(rng() * closed.length)] ?? 'N';
+    const axis = o.includes('E') || o.includes('W') ? 'z' : 'x';
+    result.push({ type, x: c.x, y: c.y, dir, axis });
+  }
+  return result;
+}
+
 export const STUDY_SECONDS = { easy: 30, medium: 15, hard: 8 };
 
 /** 1-3 stjärnor: klarad, inga felval, snabbt (under 60 % av tiden). */

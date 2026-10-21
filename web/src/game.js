@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CHARACTERS, makeHero } from './heroes.js';
 import {
-  DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
+  DELTA, OPPOSITE, distances, monsterPlan, pickHidingSpots, pickLandmarks, generateMaze, levelParams, walkCorridor, openDirs, relativeDir,
   timeLimit, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 
@@ -122,6 +122,7 @@ let mazeGroup = null;
 let wallMeshes = [];
 const fading = new Map(); // vägg -> aktuell opacitet
 let pathGroup = null;
+let mapIcons = null;
 const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maze.height / 2 + 0.5);
 
 function buildMazeMesh() {
@@ -175,6 +176,7 @@ function buildMazeMesh() {
   mazeGroup.add(star);
 
   // Vägen är en sammanhängande linje genom rutornas mitt, med rundade hörn.
+  mapIcons = new THREE.Group();
   pathGroup = new THREE.Group();
   const LINE_W = 0.15;
   const dot = new THREE.CylinderGeometry(LINE_W / 2, LINE_W / 2, 0.03, 16);
@@ -206,7 +208,118 @@ function buildMazeMesh() {
     ring.position.set(p.x, 0.015, p.z);
     mazeGroup.add(ring);
   }
+  for (const lm of maze.landmarks ?? []) {
+    const model = makeLandmark(lm.type);
+    const p = cellPos(lm.x, lm.y);
+    model.rotation.y = lm.type === 'gate' ? (lm.axis === 'x' ? 0 : Math.PI / 2) : YAW[lm.dir];
+    model.position.set(p.x, 0, p.z);
+    mazeGroup.add(model);
+    // Ikon som bara syns på kartan
+    const sprite = makeIconSprite(LANDMARK_ICON[lm.type]);
+    sprite.position.set(p.x, 3, p.z);
+    mapIcons.add(sprite);
+  }
+  mazeGroup.add(mapIcons);
   scene.add(mazeGroup);
+}
+
+function makeIconSprite(text) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.font = '96px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 72);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.scale.set(1.1, 1.1, 1);
+  sprite.renderOrder = 20;
+  return sprite;
+}
+
+const LANDMARK_ICON = { gate: '⛩️', tree: '🍎', lantern: '🏮', statue: '🗿', flag: '🚩', sunflower: '🌻' };
+
+/**
+ * Landmärken är gjorda så att de syns över häckarna och från ovan.
+ * Modellen byggs mot +z (en häck) och vrids sedan åt rätt håll.
+ */
+function makeLandmark(type) {
+  const g = new THREE.Group();
+  const lam = (c, e = 0x000000) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+  const cyl = (r1, r2, h, m, x, y, z) => {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 14), m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  const box = (w, h, dd, m, x, y, z) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  const ball = (r, m, x, y, z) => {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  const Z = 0.4; // mot häcken
+
+  if (type === 'gate') {
+    // Blå grind som spänner över korridoren (längs x).
+    const blue = lam(0x2a6edb);
+    const gold = lam(0xffd23f, 0x4a3500);
+    box(0.09, 1.15, 0.09, blue, -0.29, 0.575, 0);
+    box(0.09, 1.15, 0.09, blue, 0.29, 0.575, 0);
+    box(0.7, 0.1, 0.12, blue, 0, 1.12, 0);
+    box(0.76, 0.05, 0.16, gold, 0, 1.2, 0);
+    ball(0.06, gold, -0.29, 1.2, 0);
+    ball(0.06, gold, 0.29, 1.2, 0);
+  } else if (type === 'tree') {
+    cyl(0.06, 0.08, 1.2, lam(0x6b4423), 0, 0.6, Z);
+    ball(0.38, lam(0x3f9a3a), 0, 1.5, Z - 0.1);
+    ball(0.26, lam(0x4fb248), 0.12, 1.75, Z - 0.05);
+    const red = lam(0xe63946);
+    [[0.3, 1.45, 0.02], [-0.25, 1.4, 0.1], [0.05, 1.3, 0.18], [0.2, 1.7, 0.1], [-0.1, 1.65, 0.2], [-0.3, 1.55, -0.15]].forEach(([x, y, z]) => {
+      ball(0.06, red, x, y, Z - 0.1 + z);
+    });
+  } else if (type === 'lantern') {
+    const iron = lam(0x2b2b33);
+    cyl(0.04, 0.05, 1.5, iron, 0, 0.75, Z);
+    box(0.05, 0.05, 0.3, iron, 0, 1.45, Z - 0.15);
+    ball(0.11, lam(0xffe27a, 0xffc300), 0, 1.3, Z - 0.3);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.1, 10), iron);
+    cap.position.set(0, 1.45, Z - 0.3);
+    g.add(cap);
+  } else if (type === 'statue') {
+    const stone = lam(0xe9e4d8);
+    const gold = lam(0xffd23f, 0x4a3500);
+    box(0.34, 0.4, 0.34, lam(0xb7b2a6), 0, 1.4, Z);
+    cyl(0.1, 0.13, 0.4, stone, 0, 1.8, Z);
+    ball(0.09, stone, 0, 2.08, Z);
+    box(0.06, 0.28, 0.06, stone, 0.14, 1.95, Z).rotation.z = -0.5;
+    ball(0.07, gold, 0.26, 2.12, Z);
+  } else if (type === 'flag') {
+    cyl(0.025, 0.03, 2.1, lam(0xdddddd), 0, 1.05, Z);
+    ball(0.045, lam(0xffd23f, 0x4a3500), 0, 2.12, Z);
+    box(0.38, 0.22, 0.03, lam(0xe63946), 0, 1.9, Z - 0.2);
+    box(0.38, 0.06, 0.035, lam(0xffd23f), 0, 1.9, Z - 0.2);
+  } else if (type === 'sunflower') {
+    cyl(0.035, 0.045, 1.7, lam(0x3f9a3a), 0, 0.85, Z);
+    const head = new THREE.Group();
+    head.position.set(0, 1.75, Z - 0.1);
+    head.rotation.x = -0.9; // vänd mot korridoren
+    head.add(new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 20), lam(0xffd23f, 0x3a2c00)));
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.06, 20), lam(0x5a3b24));
+    core.position.y = 0.03;
+    head.add(core);
+    g.add(head);
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
 }
 
 function makeBarrel() {
@@ -322,6 +435,7 @@ function startLevel() {
   if (dbgSize) { params.width = params.height = Math.max(4, Math.min(40, dbgSize)); }
   maze = generateMaze(params);
   maze.spots = params.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
+  maze.landmarks = pickLandmarks(maze, params.d, params.seed, maze.spots);
   buildMazeMesh();
   // Skuggkameran ska täcka hela labyrinten, även stora banor.
   const reach = Math.max(maze.width, maze.height) / 2 + 3;
@@ -366,6 +480,7 @@ function startLevel() {
 
   // Navigator: ingen markerad väg. Memory: vägen är markerad under studietiden.
   pathGroup.visible = settings.mode === 'memory';
+  mapIcons.visible = true;
   scene.fog = null;
   scene.background = lawnColor;
   camera = mapCam;
@@ -388,6 +503,7 @@ function startLevel() {
 function beginPlay() {
   S.phase = 'play';
   pathGroup.visible = false;
+  mapIcons.visible = false;
   scene.fog = new THREE.Fog(FOG, 4.5, 9.5);
   scene.background = skyTex;
   camera = playCam;
