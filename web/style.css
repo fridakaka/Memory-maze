@@ -197,3 +197,10 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 .hero-card.locked { opacity: .55; }
 .hero-card.locked .em { filter: grayscale(1); }
 .sheet { background: #dfe8d6 !important; }
+
+#back-study {
+  position: fixed; z-index: 3;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  width: 56px; height: 56px; font-size: 28px; font-weight: 800;
+}

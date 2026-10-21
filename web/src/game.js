@@ -490,6 +490,7 @@ function startLevel() {
   show($('result'), false);
   show($('hud'));
   show($('ready'));
+  show($('back-study'));
   show($('controls'), false);
   show($('compass'), false);
   show($('rear'), false);
@@ -508,6 +509,7 @@ function beginPlay() {
   scene.background = skyTex;
   camera = playCam;
   show($('ready'), false);
+  show($('back-study'), false);
   show($('controls'));
   show($('rear'), S.kind === 'monster');
   $('hud-phase').textContent = S.kind === 'monster' ? 'Monstret vaknar snart' : 'Spring!';
@@ -1155,14 +1157,19 @@ $('play').onclick = startLevel;
 $('ready').onclick = beginPlay;
 $('res-again').onclick = startLevel;
 $('res-next').onclick = () => { settings.level = Math.min(TOTAL_LEVELS, settings.level + 1); startLevel(); };
-$('res-menu').onclick = () => {
+function backToMenu() {
   S.phase = 'menu';
   show($('result'), false);
   show($('hud'), false);
   show($('ready'), false);
   show($('menu'));
   refreshMenu(true);
-};
+  show($('back-study'), false);
+  show($('danger'), false);
+  show($('rear'), false);
+}
+$('res-menu').onclick = backToMenu;
+$('back-study').onclick = backToMenu;
 $('reset-save').onclick = () => {
   save.stars = {}; save.lives = MAX_LIVES; save.level = 1; settings.level = 1; writeSave(); refreshMenu(true);
 };
