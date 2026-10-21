@@ -91,6 +91,7 @@ scene.add(sun);
 
 const mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 const playCam = new THREE.PerspectiveCamera(50, 1, 0.1, 60);
+const rearCam = new THREE.PerspectiveCamera(62, 1.4, 0.1, 60);
 let camera = mapCam;
 
 const mats = {
@@ -351,6 +352,7 @@ function startLevel() {
   show($('ready'));
   show($('controls'), false);
   show($('compass'), false);
+  show($('rear'), false);
   $('hud-level').textContent = S.kind === 'monster' ? `Bana ${level} · Monster` : `Bana ${level}`;
   show($('danger'), false);
   const study = settings.mode === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
@@ -366,6 +368,7 @@ function beginPlay() {
   camera = playCam;
   show($('ready'), false);
   show($('controls'));
+  show($('rear'), S.kind === 'monster');
   $('hud-phase').textContent = S.kind === 'monster' ? 'Monstret vaknar snart' : 'Spring!';
   snapCamera();
   arriveAtNode(false);
@@ -594,6 +597,7 @@ function finish(win, reason = 'time') {
   show($('controls'), false);
   show($('compass'), false);
   show($('danger'), false);
+  show($('rear'), false);
   const used = S.elapsed;
   const key = `${settings.mode}:${settings.difficulty}:${settings.level}`;
 
@@ -618,6 +622,27 @@ function finish(win, reason = 'time') {
     show($('res-next'), win);
     show($('result'));
   }, win ? 1400 : 1200);
+}
+
+// ---------- Backspegel ----------
+// Visar vyn bakåt i en ruta, så att kameran inte behöver vridas.
+function renderRear() {
+  const r = $('rear').getBoundingClientRect();
+  if (!r.width) return;
+  const fwd = new THREE.Vector3(Math.sin(S.camYaw), 0, Math.cos(S.camYaw));
+  const pos = new THREE.Vector3(hero.position.x, 0, hero.position.z);
+  rearCam.position.copy(pos).addScaledVector(fwd, -0.25);
+  rearCam.position.y = 1.7;
+  rearCam.lookAt(pos.clone().addScaledVector(fwd, -3).setY(0.3));
+  rearCam.aspect = r.width / r.height;
+  rearCam.updateProjectionMatrix();
+  const h = window.innerHeight;
+  renderer.setScissorTest(true);
+  renderer.setViewport(r.left, h - r.bottom, r.width, r.height);
+  renderer.setScissor(r.left, h - r.bottom, r.width, r.height);
+  renderer.render(scene, rearCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, window.innerWidth, h);
 }
 
 // ---------- Huvudloop ----------
@@ -666,7 +691,10 @@ function frame(now) {
     if (star) star.rotation.y += dt * 2;
   }
 
-  if (maze) renderer.render(scene, camera);
+  if (maze) {
+    renderer.render(scene, camera);
+    if (S.phase === 'play' && S.kind === 'monster') renderRear();
+  }
   requestAnimationFrame(frame);
 }
 
