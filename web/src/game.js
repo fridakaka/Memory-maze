@@ -786,7 +786,7 @@ function updateHud() {
   $('hud-wrong').textContent = `✗ ${S.wrongTurns}`;
   let frac;
   if (S.phase === 'study') frac = S.studyLeft / S.studyTotal;
-  else if (S.kind === 'monster') frac = S.mon && S.mon.awake && S.mon.mode !== 'lost' ? Math.min(1, S.mon.dist / 10) : 1;
+  else if (S.kind === 'monster') frac = S.mon && S.mon.awake && S.mon.mode === 'chase' ? Math.min(1, S.mon.dist / 10) : 1;
   else if (S.kind === 'free') frac = 1;
   else frac = Math.max(0, S.timeLeft / S.limit);
   $('bar-fill').style.width = `${frac * 100}%`;
@@ -904,15 +904,27 @@ function refreshControls() {
   if (idle && !S.hidden && spotHere() && !S.barrelSeen) { S.barrelSeen = true; coach('barrel'); }
 }
 
+/** Knappen "Göm dig" är låst när monstret är så nära att det ser dig. */
+const SEEN_DIST = 3.5;
+function updateHideButton() {
+  const btn = $('hide');
+  if (btn.classList.contains('hidden')) return;
+  const m = S.mon;
+  const seen = !!m && m.awake && m.mode === 'chase' && m.dist <= SEEN_DIST;
+  btn.disabled = seen;
+  btn.textContent = seen ? 'För sent, monstret ser dig!' : 'Göm dig i tunnan';
+}
+
 function hide() {
   const spot = spotHere();
   if (S.phase !== 'play' || S.run || S.hidden || !spot || S.paused) return;
+  if (S.mon?.awake && S.mon.mode === 'chase' && S.mon.dist <= SEEN_DIST) return;
   spot.used = true;
   for (const m of spot.mesh.userData.mats) m.color.set(0x8a8f8c);
   S.hidden = true;
   hero.visible = false;
   const m = S.mon;
-  if (m && m.awake && m.dist > 3) {
+  if (m && m.awake && m.mode === 'chase' && m.dist > SEEN_DIST) {
     // Monstret såg inte var du tog vägen och går och letar.
     m.mode = 'lost';
     m.lostTimer = { easy: 10, medium: 8, hard: 6 }[settings.difficulty] ?? 8;
@@ -986,15 +998,18 @@ function cellKey(c) { return `${c.x},${c.y}`; }
 /** Väljer var monstret letar härnäst: en korsning eller en annan tunna. */
 function pickWanderTarget(m) {
   const map = distances(maze, m.cell);
+  // Monstret letar aldrig nära spelarens gömställe.
+  const nearHero = distances(maze, S.node);
   const junctions = [];
   for (const [k, d] of map) {
     if (d < 4 || d > 14) continue;
     const [x, y] = k.split(',').map(Number);
+    if ((nearHero.get(k) ?? 99) < 4) continue;
     if (openDirs(maze, x, y).length >= 3) junctions.push({ x, y });
   }
   // Andra tunnor än den du gömmer dig i
   const barrels = (maze.spots ?? []).filter((sp) =>
-    !(sp.x === S.node.x && sp.y === S.node.y) && (map.get(`${sp.x},${sp.y}`) ?? 99) <= 18);
+    (nearHero.get(`${sp.x},${sp.y}`) ?? 99) >= 4 && (map.get(`${sp.x},${sp.y}`) ?? 99) <= 18);
   let target;
   if (barrels.length && (Math.random() < 0.45 || !junctions.length)) {
     const sp = barrels[Math.floor(Math.random() * barrels.length)];
@@ -1041,14 +1056,46 @@ function updateMonster(dt) {
   }
   m.dist = m.map.get(cellKey(m.cell)) ?? Infinity;
 
+  // Monstret sover efter att det har gett upp, och vaknar efter en stund vid starten.
+  if (m.mode === 'asleep') {
+    m.sleep -= dt;
+    monster.visible = false;
+    $('hud-phase').textContent = S.hidden
+      ? 'Monstret har gett upp. Du kan komma fram!'
+      : `Monstret sover. Spring! (vaknar om ${Math.max(1, Math.ceil(m.sleep))} s)`;
+    updateHideButton();
+    if (m.sleep <= 0) {
+      m.mode = 'chase';
+      m.cell = { ...maze.start };
+      m.next = null;
+      m.tmap = null;
+      monster.visible = true;
+      monster.position.copy(cellPos(m.cell.x, m.cell.y));
+      S.shakeBurst = 0.7;
+      navigator.vibrate?.(80);
+    }
+    S.shake += (0 - S.shake) * Math.min(1, dt * 4);
+    return;
+  }
+
   if (m.mode === 'lost') {
     m.lostTimer -= dt;
-    if (m.lostTimer <= 0) { m.mode = 'chase'; m.next = null; m.tmap = null; }
+    // Ser monstret dig när du är framme och det är nära tar det upp jakten igen.
+    if (!S.hidden && m.dist <= 6) { m.mode = 'chase'; m.next = null; m.tmap = null; m.pause = 0; m.peeking = false; }
+    else if (m.lostTimer <= 0) {
+      // Monstret ger upp och går tillbaka till starten.
+      m.mode = 'retreat';
+      m.next = null;
+      m.pause = 0;
+      m.peeking = false;
+      m.tmap = distances(maze, maze.start);
+    }
   }
   const lost = m.mode === 'lost';
+  const retreat = m.mode === 'retreat';
   $('hud-phase').textContent = S.hidden
-    ? (lost ? 'Du är gömd. Monstret letar…' : 'Du är gömd, men monstret kommer!')
-    : (lost ? 'Monstret har tappat bort dig. Spring!' : 'Monstret jagar dig!');
+    ? (lost ? 'Du är gömd. Monstret letar…' : retreat ? 'Monstret ger upp och går tillbaka…' : 'Monstret såg dig, och kommer!')
+    : (lost ? 'Monstret har tappat bort dig. Spring!' : retreat ? 'Monstret går tillbaka. Spring!' : 'Monstret jagar dig!');
 
   let steer = m.map;
   let moving = true;
@@ -1074,6 +1121,16 @@ function updateMonster(dt) {
   if (S.hidden && lost && m.pause > 0) {
     $('hud-phase').textContent = m.peeking ? 'Monstret kikar in i en tunna…' : 'Monstret tittar sig omkring…';
   }
+  if (retreat) {
+    steer = m.tmap;
+    if (!m.next && m.cell.x === maze.start.x && m.cell.y === maze.start.y) {
+      m.mode = 'asleep';
+      m.sleep = (m.plan.delay ?? 5) + 2;
+      monster.visible = false;
+      if (S.hidden) coach('gaveUp');
+      return;
+    }
+  }
   if (moving && !m.next) {
     const here = steer.get(cellKey(m.cell));
     const d = openDirs(maze, m.cell.x, m.cell.y).find((dir) =>
@@ -1085,14 +1142,14 @@ function updateMonster(dt) {
     }
   }
   if (moving && m.next) {
-    m.t += m.plan.speed * dt;
+    m.t += m.plan.speed * (retreat ? 1.8 : 1) * dt;
     const a = cellPos(m.cell.x, m.cell.y);
     const b = cellPos(m.next.x, m.next.y);
     monster.position.lerpVectors(a, b, Math.min(1, m.t));
     if (m.t >= 1) { m.cell = m.next; m.next = null; }
   }
   // Förvarning: kameran darrar och skärmen pulserar allt mer ju närmare monstret kommer.
-  const close = !S.hidden && !lost ? Math.max(0, Math.min(1, (8 - m.dist) / 8)) : 0;
+  const close = !S.hidden && !lost && !retreat ? Math.max(0, Math.min(1, (8 - m.dist) / 8)) : 0;
   m.close = close;
   S.shake += ((close * close * 0.07) - S.shake) * Math.min(1, dt * 4);
   if (close > 0.6 && S.vibrateIn <= 0) {
@@ -1102,7 +1159,9 @@ function updateMonster(dt) {
   S.vibrateIn -= dt;
   const dx = monster.position.x - hero.position.x;
   const dz = monster.position.z - hero.position.z;
-  const reach = S.hidden ? (lost ? 0 : 1.2) : 0.55;
+  // Gömd är du trygg om monstret inte såg dig gömma dig.
+  const reach = S.hidden ? (lost || retreat ? 0 : 1.2) : 0.55;
+  updateHideButton();
   if (reach && Math.hypot(dx, dz) < reach) finish(false, 'monster');
 }
 

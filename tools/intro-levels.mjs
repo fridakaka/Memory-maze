@@ -3,7 +3,8 @@
 //
 // when: study = när kartan visas, play = när spelet börjar, compass = första gången kompassen
 // visas, deadend = första återvändsgränden, monsterWake = när monstret vaknar,
-// barrel = första gången "Göm dig" visas, hidden = när man har gömt sig.
+// barrel = första gången "Göm dig" visas, hidden = när man har gömt sig, gaveUp = när
+// monstret har gett upp och gått och lagt sig.
 // hi: vilken del av skärmen som ska markeras.
 // guides: vid en korsning (x, y) visas vilken pil man ska trycka på. dirs är riktningen
 // (N, E, S, W) för första, andra... besöket. only = de andra pilarna är låsta.
@@ -159,12 +160,14 @@ export const INTRO_LEVELS = [
     mode: 'memory', kind: 'monster', monsterSpeed: 1.0, delay: 4, studySeconds: 20,
     steps: [
       { when: 'study', text: 'Ser du den orange ringen med en tunna? Det är ett gömställe. Där kan du gömma dig för monstret.' },
-      { when: 'barrel', text: 'Tryck på "Göm dig i tunnan". Är monstret långt bort tappar det bort dig och går och letar.', hi: 'hide' },
-      { when: 'hidden', text: 'Bra! Nu kan du titta på monstret. Du kan komma fram när du vill, men vänta tills det har gått bort.', hi: 'unhide' },
+      { when: 'barrel', text: 'Tryck på "Göm dig i tunnan". Är monstret mer än några rutor bort tappar det bort dig och går och letar. Är det för nära ser det dig.', hi: 'hide' },
+      { when: 'hidden', text: 'Bra! Nu är du trygg i tunnan. Monstret letar efter dig, men hittar dig inte. Vänta tills det har gett upp.', hi: 'unhide' },
+      { when: 'gaveUp', text: 'Monstret gav upp och gick och la sig! Nu kan du komma fram och springa mot målet innan det vaknar.', hi: 'unhide' },
     ],
     guides: [
       { x: 0, y: 4, dirs: ['E'], text: 'Tryck på pilen för att springa.', only: true },
       { x: 2, y: 2, dirs: ['N', 'E'], text: 'Gå hit till gömstället!', only: true },
+      { x: 1, y: 1, dirs: ['E'], text: 'Tryck på Vänd för att gå tillbaka.', only: true },
     ],
   },
 ];
