@@ -379,6 +379,60 @@ export const LANDMARK_TYPES = ['gate', 'tree', 'lantern', 'statue', 'flag', 'sun
  * Returnerar { type, x, y, dir, axis }: dir är en stängd sida (häck) som föremålet
  * står mot, axis är 'x' eller 'z' för grinden (åt vilket håll den spänner).
  */
+/**
+ * Väljer rutor för klockor i sidogångar, jämnt fördelade längs rätta vägen. En klocka ligger
+ * `detour` rutor från rätta vägen, så att den kostar en avstickare att hämta.
+ */
+export function pickClocks(maze, count, seed, avoid = []) {
+  const rng = mulberry32(seed + 9001);
+  const dist = new Map();
+  const near = new Map(); // närmaste ruta på rätta vägen (index)
+  const queue = [];
+  maze.solution.forEach((c, i) => {
+    dist.set(key(c.x, c.y), 0);
+    near.set(key(c.x, c.y), i);
+    queue.push(c);
+  });
+  for (let q = 0; q < queue.length; q++) {
+    const { x, y } = queue[q];
+    for (const d of openDirs(maze, x, y)) {
+      const nx = x + DELTA[d].dx;
+      const ny = y + DELTA[d].dy;
+      const k = key(nx, ny);
+      if (!dist.has(k)) {
+        dist.set(k, dist.get(key(x, y)) + 1);
+        near.set(k, near.get(key(x, y)));
+        queue.push({ x: nx, y: ny });
+      }
+    }
+  }
+  const n = maze.solution.length;
+  const lo = Math.floor(n * 0.12);
+  const hi = Math.floor(n * 0.92);
+  const picked = [];
+  for (let s = 0; s < count; s++) {
+    const from = lo + Math.floor(((hi - lo) * s) / count);
+    const to = lo + Math.floor(((hi - lo) * (s + 1)) / count);
+    for (const [minD, maxD] of [[2, 6], [1, 8]]) {
+      const cands = [];
+      for (const [k, dd] of dist) {
+        const [x, y] = k.split(',').map(Number);
+        if (dd < minD || dd > maxD) continue;
+        const idx = near.get(k);
+        if (idx < from || idx >= to) continue;
+        if (avoid.some((a) => a.x === x && a.y === y)) continue;
+        if (picked.some((p) => Math.abs(p.x - x) + Math.abs(p.y - y) < 3)) continue;
+        cands.push({ x, y, detour: dd });
+      }
+      if (cands.length) {
+        picked.push(cands[Math.floor(rng() * cands.length)]);
+        break;
+      }
+    }
+  }
+  return picked;
+}
+
 export function pickLandmarks(maze, d, seed, avoid = []) {
   const rng = mulberry32(seed + 555);
   const count = clamp(2 + Math.round(d * 4), 2, LANDMARK_TYPES.length);

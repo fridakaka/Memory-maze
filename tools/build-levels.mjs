@@ -7,12 +7,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   generateMaze, levelParams, pickHidingSpots, pickLandmarks, encodeMaze, mazeFromPaths,
-  timeLimit, monsterPlan,
+  timeLimit, monsterPlan, pickClocks, perfectTime, RUN_SPEED, DECISION_SECONDS,
 } from '../web/src/maze.js';
 import { themeIdFor, weatherIdFor } from '../web/src/plan.js';
 import { analyzeLevel } from '../web/src/analysis.js';
 import { INTRO_LEVELS } from './intro-levels.mjs';
 import { EXPEDITIONS } from './expeditions.mjs';
+import { CLOCK_LEVELS, START_FACTOR, BONUS_FACTOR } from './clock-levels.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'levels');
 const TOTAL = Number(process.env.TOTAL_LEVELS ?? 100);
@@ -171,12 +172,62 @@ for (const exp of EXPEDITIONS) {
   }
 }
 
+// ---- Klockbanor ----
+for (const cl of CLOCK_LEVELS) {
+  let chosen = null;
+  let lastProblems = [];
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
+    const seed = cl.seed + attempt * 100003;
+    const maze = generateMaze({ width: cl.size[0], height: cl.size[1], loops: Math.round(cl.d * 7), seed });
+    const landmarks = pickLandmarks(maze, cl.d, seed, []);
+    const clocks = pickClocks(maze, cl.clocks, seed, landmarks);
+    const result = analyzeLevel(maze, { mode: 'free', d: cl.d });
+    const key = JSON.stringify(maze.open);
+    if (seenMazes.has(key)) result.problems.push(`Samma bana som ${seenMazes.get(key)}`);
+    if (new Set(landmarks.map((l) => l.type)).size !== landmarks.length) result.problems.push('Samma landmärke två gånger');
+    if (clocks.length < cl.clocks) result.problems.push(`Hittade bara ${clocks.length} av ${cl.clocks} klockor`);
+    // Tiden ska vara för kort utan klockor, men räcka med en klocka (och gott och väl med två)
+    const perfect = perfectTime(maze);
+    const start = perfect * START_FACTOR;
+    const bonus = perfect * BONUS_FACTOR;
+    const cost = (c) => (2 * c.detour) / RUN_SPEED + 2 * DECISION_SECONDS;
+    const sorted = [...clocks].sort((a, b) => cost(a) - cost(b));
+    if (!(start < perfect)) result.problems.push('Tiden är inte för kort utan klockor');
+    if (sorted.length && perfect + cost(sorted[0]) > start + bonus) result.problems.push('Går inte att klara med en klocka');
+    if (sorted.length > 1 && perfect + cost(sorted[0]) + cost(sorted[1]) > start + 2 * bonus - 0.15 * perfect) result.problems.push('Två klockor ger för snäv marginal');
+    if (!result.problems.length) {
+      seenMazes.set(key, `klockbana ${cl.id}`);
+      chosen = { maze, landmarks, clocks, result };
+    } else {
+      lastProblems = result.problems;
+    }
+  }
+  if (!chosen) { failures.push(`Klockbana ${cl.id}: ${lastProblems.join('; ')}`); continue; }
+  const { maze, landmarks, clocks, result } = chosen;
+  entries.push({
+    id: cl.id,
+    ...encodeMaze(maze),
+    mode: 'time',
+    d: cl.d,
+    theme: cl.theme,
+    weather: cl.weather,
+    spots: [],
+    landmarks,
+    plan: {},
+    clocks,
+    after: cl.after,
+    rating: result.rating,
+    label: result.label,
+    metrics: result.metrics,
+  });
+}
+
 // ---- Skriv resultatet ----
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'levels.json'), JSON.stringify({ version: 1, levels: entries }));
 
 const lines = [];
-lines.push(`Banor: ${entries.length} (${TOTAL} vanliga, ${INTRO_LEVELS.length} introduktionsbanor och ${EXPEDITIONS.length} expeditioner)`);
+lines.push(`Banor: ${entries.length} (${TOTAL} vanliga, ${INTRO_LEVELS.length} introduktionsbanor, ${EXPEDITIONS.length} expeditioner och ${CLOCK_LEVELS.length} klockbanor)`);
 lines.push('');
 lines.push('Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ');
 let prev = 0;
@@ -197,9 +248,14 @@ for (const e of entries.filter((x) => x.id > 1000 && x.id < 2000)) {
 }
 lines.push('');
 lines.push('Expeditioner:');
-for (const e of entries.filter((x) => x.id >= 2000)) {
+for (const e of entries.filter((x) => x.id >= 2000 && x.id < 3000)) {
   const parts = e.expedition.legs.map((l) => `${l.width}x${l.height} (väg ${l.metrics.pathLen}, val ${l.metrics.decisions}, betyg ${l.rating})`);
   lines.push(`  ${e.id} ${e.expedition.title} [${e.mode}]: ${parts.join(' → ')}`);
+}
+lines.push('');
+lines.push('Klockbanor:');
+for (const e of entries.filter((x) => x.id >= 3000)) {
+  lines.push(`  ${e.id} ${e.width}x${e.height}, väg ${e.metrics.pathLen}, val ${e.metrics.decisions}, klockor ${e.clocks.length} (avstickare ${e.clocks.map((c) => c.detour).join('/')}), betyg ${e.rating}`);
 }
 const byLabel = { easy: 0, mid: 0, hard: 0 };
 for (const e of entries.filter((x) => x.id <= TOTAL)) byLabel[e.label]++;

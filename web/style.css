@@ -295,3 +295,16 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 #load-pct { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; color: #fff; -webkit-text-stroke: 3px #4a50b8; paint-order: stroke fill; }
 #splash .ver { order: 4; margin-top: 14px; font-size: 14px; font-weight: 700; color: #8d95e0; }
 .note { font-size: 14px; margin: 6px 0 0; opacity: .8; }
+
+.node.clock { background: #1fa5a5; }
+#pop {
+  position: fixed; left: 0; right: 0; top: 34%; text-align: center; z-index: 6; pointer-events: none;
+  font-size: 44px; font-weight: 900; color: #ffe27a; -webkit-text-stroke: 7px #5a3d00; paint-order: stroke fill; opacity: 0;
+}
+#pop.go { animation: popUp 1.3s ease-out; }
+@keyframes popUp {
+  0% { opacity: 0; transform: translateY(20px) scale(.6); }
+  15% { opacity: 1; transform: translateY(0) scale(1.15); }
+  70% { opacity: 1; transform: translateY(-30px) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1); }
+}

@@ -6,7 +6,7 @@ import {
   DIRS, DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
-import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, loadLevelData, isIntro } from './levels.js';
+import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, clockIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
 const $ = (id) => document.getElementById(id);
@@ -353,6 +353,18 @@ function buildMazeMesh() {
     sprite.position.set(p.x, 1.5, p.z);
     mapIcons.add(sprite);
   }
+  // Klockor i sidogångarna: ger extra tid när man springer förbi
+  const clockIconSize = 1.2 + Math.max(maze.width, maze.height) * 0.05;
+  for (const c of maze.clocks ?? []) {
+    const p = cellPos(c.x, c.y);
+    c.mesh = makeClock();
+    c.mesh.position.set(p.x, 0.75, p.z);
+    mazeGroup.add(c.mesh);
+    c.icon = makeIconSprite('⏰');
+    c.icon.scale.set(clockIconSize, clockIconSize, 1);
+    c.icon.position.set(p.x, 1.5, p.z);
+    mapIcons.add(c.icon);
+  }
   const goalIcon = makeIconSprite('🏁');
   const iconSize = 1.7 + Math.max(maze.width, maze.height) * 0.07;
   goalIcon.scale.set(iconSize, iconSize, 1);
@@ -374,6 +386,25 @@ function buildMazeMesh() {
   youMarker.visible = false;
   mazeGroup.add(youMarker);
   scene.add(mazeGroup);
+}
+
+function makeClock() {
+  const g = new THREE.Group();
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.07, 12, 28), new THREE.MeshLambertMaterial({ color: 0xffc83d, emissive: 0x5a3d00 }));
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.3, 28), new THREE.MeshBasicMaterial({ color: 0xfffdf2, side: THREE.DoubleSide }));
+  const hand = new THREE.MeshBasicMaterial({ color: 0x2b2b2b, side: THREE.DoubleSide });
+  const h1 = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.22), hand);
+  h1.position.set(0, 0.09, 0.005);
+  const h2 = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.16), hand);
+  h2.position.set(0.06, 0, 0.006);
+  h2.rotation.z = -1.2;
+  const bell1 = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshLambertMaterial({ color: 0xe0493f }));
+  bell1.position.set(-0.24, 0.3, 0);
+  const bell2 = bell1.clone();
+  bell2.position.x = 0.24;
+  g.add(rim, face, h1, h2, bell1, bell2);
+  g.scale.setScalar(1.25);
+  return g;
 }
 
 function makeIconSprite(text) {
@@ -789,6 +820,15 @@ function startLevel(leg = 0, carry = null) {
   } else {
     S.limit = L.intro ? L.plan.timeLimit : timeLimit(maze, L.d, settings.difficulty, dbgTime);
   }
+  S.clocksGot = 0;
+  S.clockTotal = maze.clocks?.length ?? 0;
+  if (S.clockTotal) {
+    // Klockbana: för kort tid från början, varje klocka ger mer tid.
+    const perfect = perfectTime(maze);
+    const f = { easy: 1.3, medium: 1, hard: 0.8 }[settings.difficulty] ?? 1;
+    S.limit = Math.ceil(perfect * 0.8 * dbgTime);
+    S.clockBonus = Math.ceil(perfect * 0.45 * f);
+  }
   if (S.exp) {
     // En expedition har en gemensam gräns för alla delar, som förs vidare vid varje checkpoint.
     if (carry) S.limit = carry.limit;
@@ -844,13 +884,24 @@ function startLevel(leg = 0, carry = null) {
   show($('rear'), false);
   const wIcon = weather.emoji ? ` ${weather.emoji}` : '';
   const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}`
-    : S.exp ? `${S.exp.title} · del ${S.exp.leg + 1}/${S.exp.legs}` : `Bana ${level}`;
-  $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
+    : S.exp ? `${S.exp.title} · del ${S.exp.leg + 1}/${S.exp.legs}`
+      : clockIds().includes(level) ? `Klockbana ${clockIds().indexOf(level) + 1}` : `Bana ${level}`;
+  S.hudBase = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
+  $('hud-level').textContent = S.hudBase;
   show($('danger'), false);
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
   $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp = zooma, dra = vicka';
   updateHud();
   coach('study');
+  if (S.clockTotal && !save.seenClock) {
+    save.seenClock = true;
+    writeSave();
+    showDialog({
+      title: 'Klockbana!',
+      text: 'Den här banan är lång och tiden är kort. Plocka upp klockorna ⏰ i sidogångarna för extra tid. Du behöver inte alla, men tar du alla får du en bonus: en kik. Klockorna syns på kartan.',
+      primary: 'Okej',
+    });
+  }
 }
 
 function beginPlay() {
@@ -875,6 +926,8 @@ function beginPlay() {
 }
 
 function updateHud() {
+  const hudLevel = S.clockTotal ? `${S.hudBase} · ⏰ ${S.clocksGot}/${S.clockTotal}` : S.hudBase;
+  if (hudLevel !== undefined && $('hud-level').textContent !== hudLevel) $('hud-level').textContent = hudLevel;
   $('hud-lives').textContent = '❤'.repeat(save.lives) + '♡'.repeat(MAX_LIVES - save.lives);
   $('hud-wrong').textContent = `✗ ${S.wrongTurns}`;
   let frac;
@@ -1030,6 +1083,48 @@ function updatePeekBadge() {
   const badge = $('peek-count');
   show(badge, peeksOn());
   badge.textContent = `👁 ${save.peeks}`;
+}
+
+function showPop(text) {
+  const pop = $('pop');
+  pop.textContent = text;
+  pop.classList.remove('go');
+  void pop.offsetWidth; // startar animationen om
+  pop.classList.add('go');
+}
+
+function collectClocks() {
+  if (!S.clockTotal || S.phase !== 'play' || S.peek) return;
+  for (const c of maze.clocks) {
+    if (c.got) continue;
+    const p = cellPos(c.x, c.y);
+    if (Math.hypot(hero.position.x - p.x, hero.position.z - p.z) < 0.5) {
+      c.got = true;
+      c.collectT = 0;
+      c.icon.visible = false;
+      S.timeLeft += S.clockBonus;
+      S.limit += S.clockBonus;
+      S.clocksGot++;
+      showPop(`+${S.clockBonus} s ⏰`);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }
+  }
+}
+
+function animateClocks(dt) {
+  if (!S.clockTotal) return;
+  const t = performance.now() / 1000;
+  maze.clocks.forEach((c, i) => {
+    if (!c.mesh) return;
+    c.mesh.rotation.y += dt * 1.6;
+    c.mesh.position.y = 0.75 + Math.sin(t * 3 + i) * 0.08;
+    if (c.got) {
+      c.collectT += dt;
+      const k = Math.max(0, 1 - c.collectT / 0.3);
+      c.mesh.scale.setScalar(1.25 * k);
+      c.mesh.visible = k > 0;
+    }
+  });
 }
 
 function openPeek() {
@@ -1520,7 +1615,7 @@ function updateCompass() {
 function awardClear(level) {
   const key = levelType(level).key;
   if (!save.peekUnlocked) {
-    if (key === 'hard' || key === 'expedition') save.hardClears = (save.hardClears || 0) + 1;
+    if (key === 'hard' || key === 'expedition' || key === 'clock') save.hardClears = (save.hardClears || 0) + 1;
     if (save.hardClears >= PEEK_HARD_TO_UNLOCK) {
       save.peekUnlocked = true;
       save.peeks = (save.peeks || 0) + PEEK_FREE;
@@ -1557,6 +1652,10 @@ function finish(win, reason = 'time') {
   let award = { text: '', unlocked: false };
   if (win) {
     if (!S.intro && bestStars(settings.level) === 0) award = awardClear(settings.level);
+    if (S.clockTotal && S.clocksGot === S.clockTotal) {
+      save.peeks = (save.peeks || 0) + 1;
+      award.text += ' · alla klockor! +1 kik 👁';
+    }
     stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
@@ -1723,12 +1822,14 @@ function frame(now) {
       finish(false);
     } else {
       if (S.run) stepRun(dt);
+      collectClocks();
       updateMonster(dt);
     }
     updateHud();
   }
 
   animateMonster(dt);
+  animateClocks(dt);
   if (S.peek) {
     monster.visible = false; // monstret visas inte i kikaren
     youMarker.position.set(hero.position.x, 0, hero.position.z);
@@ -1779,7 +1880,10 @@ function frame(now) {
 function levelOrder() {
   const ids = [...introIds()];
   const n = levelCount();
-  const exps = expeditionIds().map((id) => ({ id, after: levelInfo(id).expedition?.after ?? n }));
+  const exps = [
+    ...expeditionIds().map((id) => ({ id, after: levelInfo(id).expedition?.after ?? n })),
+    ...clockIds().map((id) => ({ id, after: levelInfo(id).clock?.after ?? n })),
+  ];
   for (let l = 1; l <= n; l++) {
     ids.push(l);
     for (const e of exps) if (e.after === l) ids.push(e.id);
@@ -1793,6 +1897,7 @@ function levelType(level) {
   const p = levelInfo(level);
   if (p.intro) return { key: 'intro', label: 'Introduktion', p };
   if (p.expedition) return { key: 'expedition', label: 'Expedition', p };
+  if (p.clock) return { key: 'clock', label: 'Klockbana', p };
   if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
   const band = p.label ?? (p.d < 0.35 ? 'easy' : p.d < 0.65 ? 'mid' : 'hard');
   return { key: band, label: { easy: 'Lätt', mid: 'Medel', hard: 'Svår' }[band], p };
@@ -1866,12 +1971,14 @@ function renderMap(scroll = false) {
     const isI = isIntro(id);
     const exps = expeditionIds();
     const isE = t.key === 'expedition';
-    const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : id;
+    const isC = t.key === 'clock';
+    const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : `Bana ${id}`}, ${t.label}">`
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
       + (isE ? '<span class="mons">🧭</span>' : '')
+      + (isC ? '<span class="mons">⏰</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
       + `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span></button>`;
@@ -1894,6 +2001,10 @@ function refreshMenu(scroll = false) {
     const n = introIds().indexOf(settings.level) + 1;
     $('lvl-info').textContent = `Introduktion ${n}: ${t.p.intro.title} · ${t.p.width}×${t.p.height} rutor`;
     $('play').textContent = `Spela introduktion ${n}`;
+  } else if (t.p.clock) {
+    const n = clockIds().indexOf(settings.level) + 1;
+    $('lvl-info').textContent = `Klockbana ${n} · ${th.name} · ${t.p.width}×${t.p.height} rutor · tiden är kort, plocka ${t.p.clock.clocks} klockor`;
+    $('play').textContent = `Spela klockbana ${n}`;
   } else if (t.p.expedition) {
     $('lvl-info').textContent = `${t.p.expedition.title} · ${t.p.expedition.legs} delar med checkpoints · ${th.name} · ${t.p.width}×${t.p.height} rutor per del`;
     $('play').textContent = `Spela ${t.p.expedition.title.toLowerCase()}`;

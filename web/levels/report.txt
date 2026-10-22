@@ -1,4 +1,4 @@
-Banor: 105 (100 vanliga, 2 introduktionsbanor och 3 expeditioner)
+Banor: 108 (100 vanliga, 2 introduktionsbanor, 3 expeditioner och 3 klockbanor)
 
 Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ
    1  time     0.00  5x5       12    0          48       0    4.22     11  easy
@@ -110,6 +110,11 @@ Expeditioner:
   2001 Expedition 1 [free]: 12x13 (väg 41, val 7, betyg 38) → 12x13 (väg 49, val 4, betyg 35) → 12x13 (väg 48, val 10, betyg 42)
   2002 Expedition 2 [time]: 16x17 (väg 81, val 18, betyg 68) → 16x17 (väg 121, val 19, betyg 72) → 16x17 (väg 60, val 10, betyg 56) → 16x17 (väg 131, val 23, betyg 78)
   2003 Expedition 3 [monster]: 22x23 (väg 123, val 22, betyg 81) → 22x23 (väg 165, val 24, betyg 88) → 22x23 (väg 100, val 11, betyg 66) → 22x23 (väg 133, val 18, betyg 78) → 22x23 (väg 111, val 15, betyg 73)
+
+Klockbanor:
+  3001 14x15, väg 55, val 12, klockor 4 (avstickare 2/1/6/3), betyg 46
+  3002 18x19, väg 68, val 13, klockor 5 (avstickare 2/5/2/4/6), betyg 50
+  3003 22x23, väg 169, val 25, klockor 6 (avstickare 1/4/2/5/2/3), betyg 77
 
 Fördelning: lätta 10, medel 40, svåra 50
 
