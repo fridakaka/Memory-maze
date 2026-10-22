@@ -284,11 +284,30 @@ function buildMazeMesh() {
   };
   marker(maze.start, mats.start, new THREE.CylinderGeometry(0.4, 0.4, 0.04, 28));
   const goalMarker = marker(maze.goal, mats.goal, new THREE.CylinderGeometry(0.42, 0.42, 0.05, 5));
-  // Mål-stjärna som syns även från snett uppifrån
-  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), mats.goal);
-  star.position.set(goalMarker.position.x, 0.55, goalMarker.position.z);
+  // Målflagga: hög stolpe med rutig flagga och en snurrande stjärna överst. Syns över väggarna och
+  // från snett uppifrån. På kartan finns dessutom en stor målflaggsikon.
+  const gx = goalMarker.position.x;
+  const gz = goalMarker.position.z;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 10), mats.goal);
+  pole.position.set(gx, 1.2, gz);
+  const fc = document.createElement('canvas');
+  fc.width = 128; fc.height = 96;
+  const fx = fc.getContext('2d');
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      fx.fillStyle = (r + c) % 2 ? '#1b1b1b' : '#ffffff';
+      fx.fillRect(c * 32, r * 32, 32, 32);
+    }
+  }
+  const flagTex = new THREE.CanvasTexture(fc);
+  flagTex.colorSpace = THREE.SRGBColorSpace;
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.75), new THREE.MeshBasicMaterial({ map: flagTex, side: THREE.DoubleSide }));
+  flag.position.set(gx + 0.5, 2.0, gz);
+  flag.rotation.y = 0.25;
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), mats.goal);
+  star.position.set(gx, 2.75, gz);
   star.name = 'goalStar';
-  mazeGroup.add(star);
+  mazeGroup.add(pole, flag, star);
 
   // Vägen är en sammanhängande linje genom rutornas mitt, med rundade hörn.
   mapIcons = new THREE.Group();
@@ -334,6 +353,11 @@ function buildMazeMesh() {
     sprite.position.set(p.x, 1.5, p.z);
     mapIcons.add(sprite);
   }
+  const goalIcon = makeIconSprite('🏁');
+  const gs = 1.7 + Math.max(maze.width, maze.height) * 0.07;
+  goalIcon.scale.set(gs, gs, 1);
+  goalIcon.position.set(gx, 1.6, gz);
+  mapIcons.add(goalIcon);
   mazeGroup.add(mapIcons);
 
   // "Du är här": en pulserande ring, en pil åt blickriktningen och en nål. Syns bara i kikaren.
