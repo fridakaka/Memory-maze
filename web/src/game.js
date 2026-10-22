@@ -58,7 +58,7 @@ sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
-const mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+const mapCam = new THREE.PerspectiveCamera(40, 1, 0.5, 300);
 const playCam = new THREE.PerspectiveCamera(50, 1, 0.3, 40);
 const rearCam = new THREE.PerspectiveCamera(62, 1.4, 0.3, 40);
 let camera = mapCam;
@@ -67,7 +67,7 @@ const mats = {
   floor: new THREE.MeshLambertMaterial(),
   wallSide: new THREE.MeshLambertMaterial(),
   wallTop: new THREE.MeshLambertMaterial({ polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
-  path: new THREE.MeshLambertMaterial({ color: 0xff4f8b, emissive: 0x7a1038 }),
+  path: new THREE.MeshLambertMaterial({ color: 0xff4f8b, emissive: 0x7a1038, depthTest: false }),
   start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
   goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
   spot: new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x6b3300 }),
@@ -94,38 +94,12 @@ function applyTheme(t, size) {
   lawnColor.set(t.ground);
 }
 
-/** Kartvyn ovanifrån: släta, ljusa färger i temats stil, utan skuggor och texturer. */
-const MAP_COLORS = {
-  hedge: { wall: 0x58a845, floor: 0xf3ead0, bg: 0x6fb04e },
-  flowers: { wall: 0x6cbb63, floor: 0xfff4e0, bg: 0x7cc070 },
-  brick: { wall: 0xcf6f55, floor: 0xf4e6cf, bg: 0xc98a62 },
-  indoor: { wall: 0xc2915f, floor: 0xf7eedc, bg: 0xb58f5f },
-  autumn: { wall: 0xe08a2e, floor: 0xf8ebc8, bg: 0xcf9a4c },
-  snow: { wall: 0x8ec6ea, floor: 0xf7fbff, bg: 0x7fb0d0 },
-  library: { wall: 0x9a6a46, floor: 0xf3e6ca, bg: 0x8a5f3c },
-  candy: { wall: 0x7ad6c6, floor: 0xfff6e8, bg: 0xe58fb4 },
-  reef: { wall: 0xf28a66, floor: 0xe8f7fb, bg: 0x3fa5c4 },
-  space: { wall: 0x8e9cf0, floor: 0x2a3160, bg: 0x151a38 },
-  stone: { wall: 0x939aa5, floor: 0xf0eadf, bg: 0x8b939c },
-};
-const mapMats = {
-  wall: new THREE.MeshBasicMaterial(),
-  floor: new THREE.MeshBasicMaterial(),
-};
-function setMapLook(on) {
-  if (on) {
-    const c = MAP_COLORS[theme.id] ?? MAP_COLORS.hedge;
-    mapMats.wall.color.setHex(c.wall);
-    mapMats.floor.color.setHex(c.floor);
-    scene.background = new THREE.Color(c.bg);
-    wallTops.material = mapMats.wall;
-    floorMesh.material = mapMats.floor;
-    sun.castShadow = false;
-  } else {
-    wallTops.material = mats.wallTop;
-    floorMesh.material = mats.floor;
-    sun.castShadow = true;
-  }
+/** I kartvyn är väggarna lägre så att de skymmer mindre när kartan lutas. */
+const MAP_WALL_SCALE = 0.6;
+function setMapWalls(on) {
+  for (let k = 0; k < walls.length; k++) setWallMatrix(k, on ? MAP_WALL_SCALE : 1);
+  wallSides.instanceMatrix.needsUpdate = true;
+  wallTops.instanceMatrix.needsUpdate = true;
 }
 
 const WALL_H = 1.2;
@@ -352,7 +326,7 @@ function buildMazeMesh() {
     mazeGroup.add(model);
     // Ikon som bara syns på kartan
     const sprite = makeIconSprite(LANDMARK_ICON[lm.type]);
-    sprite.position.set(p.x, 3, p.z);
+    sprite.position.set(p.x, 1.5, p.z);
     mapIcons.add(sprite);
   }
   mazeGroup.add(mapIcons);
@@ -479,25 +453,23 @@ function makeBarrel() {
   return g;
 }
 
+/** Kartkameran svävar över labyrinten och kan lutas (S.mapPitch), zoomas och dras. */
 function fitMapCamera() {
   if (!maze) return;
   const aspect = window.innerWidth / window.innerHeight;
-  // Lämna plats för HUD uppe och knapp nere.
-  let halfW = maze.width / 2 + 0.6;
-  let halfH = maze.height / 2 + 0.6;
-  if (halfW / aspect > halfH) halfH = halfW / aspect;
-  else halfW = halfH * aspect;
-  const shift = halfH * 0.12;
-  const z = S.mapZoom;
-  // Kartan kan zoomas och dras. Se till att man inte kan dra bort den från skärmen.
-  const slackX = Math.max(0, (maze.width / 2 + 0.6) - halfW / z);
-  const slackZ = Math.max(0, (maze.height / 2 + 0.6) - halfH / z + shift / z);
-  S.mapPanX = Math.max(-slackX, Math.min(slackX, S.mapPanX));
-  S.mapPanZ = Math.max(-slackZ - 0.01, Math.min(slackZ + 0.01, S.mapPanZ));
-  mapCam.left = -halfW / z; mapCam.right = halfW / z;
-  mapCam.top = (halfH + shift) / z; mapCam.bottom = (-halfH + shift) / z;
-  mapCam.position.set(S.mapPanX, 40, S.mapPanZ);
-  mapCam.up.set(0, 0, -1);
+  mapCam.aspect = aspect;
+  const tanV = Math.tan((mapCam.fov * Math.PI) / 360);
+  // Avstånd så att hela labyrinten får plats rakt uppifrån (bredd eller höjd avgör)
+  const needW = (maze.width + 1.4) / 2 / (tanV * aspect);
+  const needH = (maze.height + 1.4) / 2 / tanV * 1.12;
+  const dist = Math.max(needW, needH) * 1.1 / S.mapZoom;
+  const reachX = maze.width / 2, reachZ = maze.height / 2;
+  S.mapPanX = Math.max(-reachX, Math.min(reachX, S.mapPanX));
+  S.mapPanZ = Math.max(-reachZ, Math.min(reachZ, S.mapPanZ));
+  if (S.mapZoom <= 1.001) { S.mapPanX = 0; S.mapPanZ = 0; }
+  const pitch = S.mapPitch;
+  mapCam.position.set(S.mapPanX, dist * Math.sin(pitch), S.mapPanZ + dist * Math.cos(pitch));
+  mapCam.up.set(0, 1, 0);
   mapCam.lookAt(S.mapPanX, 0, S.mapPanZ);
   mapCam.updateProjectionMatrix();
 }
@@ -708,7 +680,7 @@ const S = {
   node: null, // nuvarande nod {x,y}
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
-  yaw: 0, camYaw: 0, camVel: 0, lookYaw: 0, mapZoom: 1, mapPanX: 0, mapPanZ: 0,
+  yaw: 0, camYaw: 0, camVel: 0, lookYaw: 0, mapZoom: 1, mapPanX: 0, mapPanZ: 0, mapPitch: 1.05,
   kind: 'time', uturn: false, shake: 0, shakeBurst: 0, vibrateIn: 0, mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
@@ -795,9 +767,10 @@ function startLevel() {
   pathGroup.visible = S.modeNow === 'memory';
   mapIcons.visible = true;
   scene.fog = null;
-  setMapLook(true);
+  scene.background = lawnColor;
+  setMapWalls(true);
   camera = mapCam;
-  S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0;
+  S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0; S.mapPitch = 1.05;
   fitMapCamera();
   S.phase = 'study';
 
@@ -806,6 +779,7 @@ function startLevel() {
   show($('hud'));
   show($('ready'));
   show($('back-study'));
+  show($('tilt'));
   show($('controls'), false);
   show($('compass'), false);
   show($('rear'), false);
@@ -814,7 +788,7 @@ function startLevel() {
   $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   show($('danger'), false);
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
-  $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp för att zooma';
+  $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp = zooma, ◢ = vicka';
   updateHud();
   coach('study');
 }
@@ -825,10 +799,11 @@ function beginPlay() {
   mapIcons.visible = false;
   scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
   scene.background = skyTex;
-  setMapLook(false);
+  setMapWalls(false);
   camera = playCam;
   show($('ready'), false);
   show($('back-study'), false);
+  show($('tilt'), false);
   show($('controls'));
   show($('rear'), S.kind === 'monster');
   $('hud-phase').textContent = S.kind === 'monster' ? 'Monstret vaknar snart' : 'Spring!';
@@ -1802,6 +1777,7 @@ function backToMenu() {
   show($('menu'));
   refreshMenu(true);
   show($('back-study'), false);
+  show($('tilt'), false);
   show($('danger'), false);
   show($('rear'), false);
 }
@@ -1835,13 +1811,26 @@ for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
 }
 // Svajpa för att titta runt medan man är gömd; nyp, dra och rulla för att zooma kartan.
 const pointers = new Map();
+const ray = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+/** Var på marken en punkt på skärmen pekar. */
 function mapWorldAt(sx, sy) {
-  const w = window.innerWidth, h = window.innerHeight;
-  return {
-    x: mapCam.position.x + mapCam.left + (sx / w) * (mapCam.right - mapCam.left),
-    z: mapCam.position.z - (mapCam.top - (sy / h) * (mapCam.top - mapCam.bottom)),
-  };
+  const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, mapCam);
+  const hit = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(groundPlane, hit)) return { x: S.mapPanX, z: S.mapPanZ };
+  return { x: hit.x, z: hit.z };
 }
+const MAP_PITCHES = [0.62, 1.05, 1.5];
+function setMapPitch(pitch) {
+  S.mapPitch = Math.max(0.45, Math.min(1.53, pitch));
+  fitMapCamera();
+}
+$('tilt').onclick = () => {
+  // Hoppa till nästa vinkel: lutad, mer uppifrån, rakt uppifrån
+  const next = MAP_PITCHES.find((p) => p > S.mapPitch + 0.05) ?? MAP_PITCHES[0];
+  setMapPitch(next);
+};
 function setMapZoom(zoom, sx, sy) {
   const before = mapWorldAt(sx, sy);
   S.mapZoom = Math.max(1, Math.min(5, zoom));
@@ -1866,10 +1855,14 @@ window.addEventListener('pointermove', (e) => {
       const d0 = Math.hypot(p.x - other.x, p.y - other.y) || 1;
       const d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
       setMapZoom(S.mapZoom * (d1 / d0), mx, my);
+      // Två fingrar som glider uppåt eller nedåt vickar kartan
+      setMapPitch(S.mapPitch - (e.clientY - p.y) * 0.006);
     } else if (S.mapZoom > 1) {
-      const u = (mapCam.right - mapCam.left) / window.innerWidth;
-      S.mapPanX -= dx * u;
-      S.mapPanZ -= dy * u;
+      // Dra kartan: punkten under fingret ska stanna under fingret
+      const before = mapWorldAt(p.x, p.y);
+      const after = mapWorldAt(e.clientX, e.clientY);
+      S.mapPanX += before.x - after.x;
+      S.mapPanZ += before.z - after.z;
       fitMapCamera();
     }
   } else if (S.phase === 'play' && S.hidden) {
