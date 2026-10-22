@@ -1722,13 +1722,13 @@ function frame(now) {
     S.camVel += (want - S.camVel) * Math.min(1, dt * (S.uturn ? 9 : 3));
     if (S.uturn && Math.abs(angleDiff(S.camYaw, S.yaw)) < 0.3) S.uturn = false;
     S.camYaw += S.camVel * dt;
-    if (!S.hidden && S.lookYaw !== 0) {
+    if (S.lookYaw !== 0 && (S.run || S.phase !== 'play')) {
       S.lookYaw *= Math.max(0, 1 - dt * 6);
       if (Math.abs(S.lookYaw) < 0.01) S.lookYaw = 0;
     }
     placeCamera(Math.min(1, dt * 12));
     updateCompass();
-    const lookHint = ' · Svajpa för att titta runt';
+    const lookHint = ' · svajpa för att titta runt';
     if (S.phase === 'play' && S.hidden && !$('hud-phase').textContent.endsWith(lookHint)) $('hud-phase').textContent += lookHint;
   } else if (S.phase === 'study') {
     animateHero(dt);
@@ -2052,8 +2052,8 @@ window.addEventListener('pointermove', (e) => {
       // Ett finger: dra uppåt eller nedåt för att vicka kartan
       setMapPitch(S.mapPitch + dy * 0.006);
     }
-  } else if (S.phase === 'play' && S.hidden) {
-    S.lookYaw -= dx * 0.01;
+  } else if (S.phase === 'play' && !S.run) {
+    S.lookYaw -= dx * 0.01; // titta runt när figuren står still
   }
   p.x = e.clientX; p.y = e.clientY;
 });
