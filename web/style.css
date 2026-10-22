@@ -251,6 +251,7 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 .dialog-buttons .primary { margin-top: 0; font-size: 18px; padding: 14px; }
 
 /* Markering av det som förklaras och den pil man ska trycka på */
+#dialog.low { padding-top: 340px; }
 .coach-hi { animation: coachPulse 1s ease-in-out infinite; outline: 4px solid #ffd23f; outline-offset: 3px; border-radius: 16px; z-index: 9; }
 @keyframes coachPulse { 50% { outline-color: rgba(255, 210, 63, .25); } }
 #controls button.guide { animation: coachPulse 0.9s ease-in-out infinite; outline: 4px solid #ffd23f; outline-offset: 2px; }

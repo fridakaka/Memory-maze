@@ -890,6 +890,8 @@ function showDialog({ title, text, primary = 'Okej', secondary = null, onPrimary
   show($('dialog-secondary'), !!secondary);
   if (secondary) $('dialog-secondary').textContent = secondary;
   dialogHandlers = { onPrimary, onSecondary };
+  // Rutan flyttas ned om den markerade delen (kompass, backspegel) sitter uppe och annars skulle ligga över texten.
+  $('dialog').classList.toggle('low', hi === 'rear' || hi === 'compass');
   S.paused = true;
   highlight(hi);
   show($('dialog'));
@@ -933,7 +935,8 @@ function applyGuide() {
   const g = S.intro.guides.find((x) => x.x === S.node.x && x.y === S.node.y);
   if (!g) return;
   const dir = g.dirs[Math.min(S.visits[key] - 1, g.dirs.length - 1)];
-  S.guide = { rel: relativeDir(S.heading, dir), text: g.text, only: !!g.only };
+  // Förklaringen visas bara första gången man står i korsningen. Pilen pekas ut varje gång.
+  S.guide = { rel: relativeDir(S.heading, dir), text: S.visits[key] === 1 ? g.text : '', only: !!g.only };
 }
 
 function arriveAtNode(animate = true) {
