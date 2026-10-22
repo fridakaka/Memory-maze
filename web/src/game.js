@@ -163,7 +163,9 @@ function ghostMaterial(base) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInstAlpha = instAlpha;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vInstAlpha;')
-      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vInstAlpha );');
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vInstAlpha );')
+      // Lysande delar (neonlister) tonas ut extra mycket, annars ser väggen ut som glas med linjer
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vInstAlpha * vInstAlpha * vInstAlpha;');
   };
   return m;
 }
