@@ -1,4 +1,4 @@
-Banor: 108 (100 vanliga och 8 introduktionsbanor)
+Banor: 102 (100 vanliga och 2 introduktionsbanor)
 
 Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ
    1  time     0.00  5x5       12    0          48       0    4.22     11  easy
@@ -103,14 +103,8 @@ Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  T
  100  monster  1.00  26x27    176   19          75       7    1.20     84  hard
 
 Introduktionsbanor:
-  1001 Kartan: 4x3, väg 5, val 0, betyg 11 (easy)
-  1002 Vägval: 5x4, väg 8, val 2, betyg 22 (easy)
-  1003 Återvändsgränd: 5x4, väg 7, val 1, betyg 22 (easy)
-  1004 Kompassen: 5x5, väg 12, val 1, betyg 20 (easy)
-  1005 Hitta själv: 5x5, väg 12, val 4, betyg 23 (easy)
-  1006 Tiden: 6x5, väg 13, val 3, betyg 23 (easy)
-  1007 Monster: 6x5, väg 13, val 3, betyg 26 (easy)
-  1008 Gömställen: 7x5, väg 14, val 2, betyg 25 (easy)
+  1001 Så spelar du: 6x5, väg 13, val 3, betyg 23 (easy)
+  1002 Monster: 7x5, väg 14, val 2, betyg 24 (easy)
 
 Fördelning: lätta 10, medel 40, svåra 50
 
