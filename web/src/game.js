@@ -94,28 +94,38 @@ function applyTheme(t, size) {
   lawnColor.set(t.ground);
 }
 
-/** Kartvyn ovanifrån: släta, kontrastrika färger och inga skuggor, så att gångarna lätt går att läsa. */
-const MAP_COLORS = { wall: 0xf1ead6, floor: 0x2f3745, background: 0x1d222b };
+/** Kartvyn ovanifrån: släta, ljusa färger i temats stil, utan skuggor och texturer. */
+const MAP_COLORS = {
+  hedge: { wall: 0x58a845, floor: 0xf3ead0, bg: 0x6fb04e },
+  flowers: { wall: 0x6cbb63, floor: 0xfff4e0, bg: 0x7cc070 },
+  brick: { wall: 0xcf6f55, floor: 0xf4e6cf, bg: 0xc98a62 },
+  indoor: { wall: 0xc2915f, floor: 0xf7eedc, bg: 0xb58f5f },
+  autumn: { wall: 0xe08a2e, floor: 0xf8ebc8, bg: 0xcf9a4c },
+  snow: { wall: 0x8ec6ea, floor: 0xf7fbff, bg: 0x7fb0d0 },
+  library: { wall: 0x9a6a46, floor: 0xf3e6ca, bg: 0x8a5f3c },
+  candy: { wall: 0x7ad6c6, floor: 0xfff6e8, bg: 0xe58fb4 },
+  reef: { wall: 0xf28a66, floor: 0xe8f7fb, bg: 0x3fa5c4 },
+  space: { wall: 0x8e9cf0, floor: 0x2a3160, bg: 0x151a38 },
+  stone: { wall: 0x939aa5, floor: 0xf0eadf, bg: 0x8b939c },
+};
+const mapMats = {
+  wall: new THREE.MeshBasicMaterial(),
+  floor: new THREE.MeshBasicMaterial(),
+};
 function setMapLook(on) {
   if (on) {
-    mats.wallTop.map = null;
-    mats.wallTop.color.setHex(MAP_COLORS.wall);
-    mats.floor.map = null;
-    mats.floor.emissiveMap = null;
-    mats.floor.emissive.setHex(0x000000);
-    mats.floor.color.setHex(MAP_COLORS.floor);
+    const c = MAP_COLORS[theme.id] ?? MAP_COLORS.hedge;
+    mapMats.wall.color.setHex(c.wall);
+    mapMats.floor.color.setHex(c.floor);
+    scene.background = new THREE.Color(c.bg);
+    wallTops.material = mapMats.wall;
+    floorMesh.material = mapMats.floor;
     sun.castShadow = false;
   } else {
-    const a = getAssets(theme, window.innerHeight / window.innerWidth);
-    mats.wallTop.map = a.top;
-    mats.wallTop.color.setHex(0xffffff);
-    mats.floor.map = a.floor;
-    mats.floor.color.setHex(0xffffff);
-    mats.floor.emissiveMap = a.floorGlow;
-    mats.floor.emissive.setHex(a.floorGlow ? 0xffffff : 0x000000);
+    wallTops.material = mats.wallTop;
+    floorMesh.material = mats.floor;
     sun.castShadow = true;
   }
-  mats.wallTop.needsUpdate = mats.floor.needsUpdate = true;
 }
 
 const WALL_H = 1.2;
@@ -216,6 +226,7 @@ let pathGroup = null;
 let mapIcons = null;
 const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maze.height / 2 + 0.5);
 
+let floorMesh = null;
 function buildMazeMesh() {
   if (mazeGroup) scene.remove(mazeGroup);
   mazeGroup = new THREE.Group();
@@ -226,6 +237,7 @@ function buildMazeMesh() {
   const { width: W, height: H } = maze;
 
   const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.2, H + 1.2), mats.floor);
+  floorMesh = floor;
   floor.position.y = -0.1;
   floor.receiveShadow = true;
   mazeGroup.add(floor);
@@ -783,7 +795,6 @@ function startLevel() {
   pathGroup.visible = S.modeNow === 'memory';
   mapIcons.visible = true;
   scene.fog = null;
-  scene.background = new THREE.Color(MAP_COLORS.background);
   setMapLook(true);
   camera = mapCam;
   S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0;
