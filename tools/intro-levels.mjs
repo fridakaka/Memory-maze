@@ -26,8 +26,7 @@ export const INTRO_LEVELS = [
     steps: [
       { when: 'study', text: 'Välkommen! Det här är en labyrint ovanifrån. Du är den blå cirkeln och målet är guldstjärnan. Den rosa linjen är rätt väg.' },
       { when: 'study', text: 'De små bilderna är landmärken, till exempel ett träd och en lykta. De hjälper dig att komma ihåg vägen. Du kan nypa för att zooma in på kartan. Tryck på "Jag är redo" när du kan vägen.', hi: 'ready' },
-      { when: 'study', text: 'I de vanliga banorna är den rosa linjen ofta borta. Då hittar du vägen själv med blicken innan du trycker på "Jag är redo".' },
-      { when: 'play', text: 'Nu är kartan borta! Figuren springer själv längs gångarna. När den stannar väljer du väg med pilarna: ← vänster, ↑ rakt fram och → höger, sett från figuren. I övningen blinkar rätt pil, så välj den. I vanliga banor blinkar ingen pil, då väljer du själv.', hi: 'controls' },
+      { when: 'play', text: 'Figuren springer själv längs gångarna. När den stannar väljer du väg med pilarna: ← vänster, ↑ rakt fram och → höger, sett från figuren. I övningen blinkar rätt pil, så välj den. I vanliga banor blinkar ingen pil, då väljer du själv.', hi: 'controls' },
       { when: 'play', text: 'Den gröna stapeln är tiden som är kvar. Tar den slut förlorar du ett liv, men inte i övningen.', hi: 'bar' },
       { when: 'compass', text: 'Kompassen visar var norr är när du står still. Kartan har alltid norr uppåt, så kompassen hjälper dig att koppla ihop kartan med det du ser.', hi: 'compass' },
       { when: 'deadend', text: 'Återvändsgränd! Ibland väljer man fel väg. Det är inte farligt, det kostar bara tid. Tryck på "Vänd" så springer figuren tillbaka till korsningen.', hi: 'back' },

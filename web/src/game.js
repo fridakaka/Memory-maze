@@ -3,7 +3,7 @@ import { CHARACTERS, makeHero, setAccessory, setHelmet } from './heroes.js';
 import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
-  DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
+  DIRS, DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, loadLevelData, isIntro } from './levels.js';
@@ -32,7 +32,7 @@ const PEEK_FREE = 5;
 const PEEK_EVERY = 3;
 
 // ---------- Inställningar ----------
-const settings = { mode: 'navigator', difficulty: 'medium', level: 1 };
+const settings = { mode: 'memory', difficulty: 'medium', level: 1 };
 const MAX_LIVES = 5;
 
 // ---------- three.js ----------
@@ -282,8 +282,8 @@ function buildMazeMesh() {
     mazeGroup.add(m);
     return m;
   };
-  marker(maze.start, mats.start, new THREE.CylinderGeometry(0.26, 0.26, 0.03, 28));
-  const goalMarker = marker(maze.goal, mats.goal, new THREE.CylinderGeometry(0.34, 0.34, 0.05, 5));
+  marker(maze.start, mats.start, new THREE.CylinderGeometry(0.4, 0.4, 0.04, 28));
+  const goalMarker = marker(maze.goal, mats.goal, new THREE.CylinderGeometry(0.42, 0.42, 0.05, 5));
   // Mål-stjärna som syns även från snett uppifrån
   const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), mats.goal);
   star.position.set(goalMarker.position.x, 0.55, goalMarker.position.z);
@@ -747,7 +747,7 @@ function startLevel(leg = 0, carry = null) {
   S.vibrateIn = 0;
   S.hidden = false;
   S.paused = false;
-  hero.visible = true;
+  hero.visible = false; // på kartan syns startpricken i stället för figuren
   S.difficulty = L.d;
   monster.visible = false;
   S.mon = null;
@@ -824,7 +824,7 @@ function startLevel(leg = 0, carry = null) {
   $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   show($('danger'), false);
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
-  $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp = zooma, ◢ = vicka';
+  $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp = zooma, dra = vicka';
   updateHud();
   coach('study');
 }
@@ -836,6 +836,7 @@ function beginPlay() {
   scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
   scene.background = skyTex;
   setMapWalls(false);
+  hero.visible = true;
   camera = playCam;
   show($('ready'), false);
   show($('back-study'), false);
@@ -933,7 +934,15 @@ function applyGuide() {
   const key = `${S.node.x},${S.node.y}`;
   S.visits[key] = (S.visits[key] ?? 0) + 1;
   const g = S.intro.guides.find((x) => x.x === S.node.x && x.y === S.node.y);
-  if (!g) return;
+  if (!g) {
+    // Utan egen guide pekar pilen ut rätt väg, så att hela rundan är guidad.
+    const i = maze.solution.findIndex((c) => c.x === S.node.x && c.y === S.node.y);
+    const nx = maze.solution[i + 1];
+    if (i < 0 || !nx) return;
+    const dir = DIRS.find((d) => S.node.x + DELTA[d].dx === nx.x && S.node.y + DELTA[d].dy === nx.y);
+    if (dir) S.guide = { rel: relativeDir(S.heading, dir), text: '', only: true };
+    return;
+  }
   const dir = g.dirs[Math.min(S.visits[key] - 1, g.dirs.length - 1)];
   // Förklaringen visas bara första gången man står i korsningen. Pilen pekas ut varje gång.
   S.guide = { rel: relativeDir(S.heading, dir), text: S.visits[key] === 1 ? g.text : '', only: !!g.only };
@@ -1024,6 +1033,7 @@ function openPeek() {
   pathGroup.visible = false;
   mapIcons.visible = true;
   youMarker.visible = true;
+  hero.visible = false;
   camera = mapCam;
   S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.mapPitch = 1.05;
   fitMapCamera();
@@ -1040,6 +1050,7 @@ function closePeek() {
   scene.background = skyTex;
   mapIcons.visible = false;
   youMarker.visible = false;
+  hero.visible = !S.hidden;
   camera = playCam;
   show($('peek-close'), false);
   show($('tilt'), false);
@@ -2026,20 +2037,20 @@ window.addEventListener('pointermove', (e) => {
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   if (mapView()) {
     if (pointers.size >= 2) {
+      // Två fingrar: nyp för att zooma och dra för att flytta kartan
       const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)[1];
-      const mx = (e.clientX + other.x) / 2, my = (e.clientY + other.y) / 2;
       const d0 = Math.hypot(p.x - other.x, p.y - other.y) || 1;
       const d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
-      setMapZoom(S.mapZoom * (d1 / d0), mx, my);
-      // Två fingrar som glider uppåt eller nedåt vickar kartan
-      setMapPitch(S.mapPitch - (e.clientY - p.y) * 0.006);
-    } else if (S.mapZoom > 1) {
-      // Dra kartan: punkten under fingret ska stanna under fingret
-      const before = mapWorldAt(p.x, p.y);
-      const after = mapWorldAt(e.clientX, e.clientY);
-      S.mapPanX += before.x - after.x;
-      S.mapPanZ += before.z - after.z;
+      const old = mapWorldAt((p.x + other.x) / 2, (p.y + other.y) / 2);
+      S.mapZoom = Math.max(1, Math.min(5, S.mapZoom * (d1 / d0)));
       fitMapCamera();
+      const now = mapWorldAt((e.clientX + other.x) / 2, (e.clientY + other.y) / 2);
+      S.mapPanX += old.x - now.x;
+      S.mapPanZ += old.z - now.z;
+      fitMapCamera();
+    } else {
+      // Ett finger: dra uppåt eller nedåt för att vicka kartan
+      setMapPitch(S.mapPitch + dy * 0.006);
     }
   } else if (S.phase === 'play' && S.hidden) {
     S.lookYaw -= dx * 0.01;
@@ -2079,11 +2090,34 @@ function firstLevel() {
   const wanted = save.level ?? (intros[0] ?? 1);
   return levelOrder().includes(wanted) ? wanted : 1;
 }
+let levelsReady = false;
 settings.level = firstLevel();
 refreshMenu(true);
 loadLevelData().then((loaded) => {
+  levelsReady = true;
   if (!loaded) return;
   settings.level = firstLevel();
   refreshMenu(true);
 });
 requestAnimationFrame(frame);
+
+// ---------- Startskärm ----------
+// Visas medan spelet laddar. Visas minst en stund så att den hinner synas.
+{
+  const splash = $('splash');
+  const start = performance.now();
+  const MIN_MS = 1800;
+  const tick = () => {
+    const t = (performance.now() - start) / MIN_MS;
+    const pct = Math.min(1, t, levelsReady ? 1 : 0.9);
+    $('load-fill').style.width = `${Math.round(pct * 100)}%`;
+    $('load-pct').textContent = `${Math.round(pct * 100)}%`;
+    if (pct >= 1) {
+      splash.classList.add('done');
+      setTimeout(() => splash.remove(), 600);
+    } else {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}

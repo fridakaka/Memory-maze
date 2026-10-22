@@ -9,6 +9,42 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Startskärm -->
+  <div id="splash">
+    <svg class="art" viewBox="0 0 360 420" aria-hidden="true">
+      <defs>
+        <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#8fd9f2"/><stop offset="1" stop-color="#8fd9f2" stop-opacity="0"/></radialGradient>
+      </defs>
+      <ellipse cx="180" cy="210" rx="180" ry="200" fill="url(#glow)"/>
+      <!-- häckar -->
+      <g fill="#3f9a3a" stroke="#256b2a" stroke-width="3" stroke-linejoin="round">
+        <rect x="30" y="250" width="300" height="24" rx="12"/>
+        <rect x="30" y="250" width="24" height="130" rx="12"/>
+        <rect x="306" y="250" width="24" height="130" rx="12"/>
+        <rect x="30" y="356" width="300" height="24" rx="12"/>
+        <rect x="90" y="250" width="24" height="76" rx="12"/>
+        <rect x="150" y="304" width="24" height="76" rx="12"/>
+        <rect x="210" y="250" width="24" height="76" rx="12"/>
+        <rect x="210" y="304" width="96" height="24" rx="12"/>
+        <rect x="90" y="304" width="84" height="24" rx="12"/>
+      </g>
+      <path d="M 66 344 L 66 290 L 132 290 L 132 344 L 192 344 L 192 290 L 258 290 L 258 344 L 294 344" fill="none" stroke="#ff4f8b" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>
+      <!-- gubben -->
+      <g transform="translate(66 322)">
+        <ellipse cx="0" cy="24" rx="20" ry="6" fill="#2f6fb4" opacity=".6"/>
+        <circle cx="0" cy="4" r="17" fill="#f3a04a" stroke="#c16f1e" stroke-width="2"/>
+        <path d="M -15 -8 L -13 -26 L -2 -14 Z M 15 -8 L 13 -26 L 2 -14 Z" fill="#f3a04a" stroke="#c16f1e" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="-6" cy="2" r="3" fill="#2b2b2b"/><circle cx="6" cy="2" r="3" fill="#2b2b2b"/>
+        <path d="M -4 9 Q 0 13 4 9" fill="none" stroke="#7a3d10" stroke-width="2" stroke-linecap="round"/>
+      </g>
+      <!-- stjärnan -->
+      <path transform="translate(294 330)" d="M0 -16 L5 -5 L17 -4 L8 4 L11 16 L0 10 L-11 16 L-8 4 L-17 -4 L-5 -5 Z" fill="#ffd25a" stroke="#c9961a" stroke-width="2.5" stroke-linejoin="round"/>
+    </svg>
+    <div class="logo"><span class="l1">Maze</span><span class="l2">Memory</span><small>Minns vägen ut</small></div>
+    <div class="load"><div id="load-fill"></div><span id="load-pct">0%</span></div>
+    <div class="ver">version 1.7</div>
+  </div>
+
   <canvas id="scene"></canvas>
   <div id="danger" class="hidden"></div>
   <div id="rear" class="hidden"><span>Bakom dig</span></div>
@@ -67,9 +103,10 @@
 
     <h2>Spelläge</h2>
     <div class="seg" id="seg-mode">
-      <button data-v="navigator" class="on">Navigator<small>Hitta vägen själv</small></button>
-      <button data-v="memory">Memory<small>Vägen är markerad</small></button>
+      <button data-v="navigator">Navigator<small>Hitta vägen själv</small></button>
+      <button data-v="memory" class="on">Memory<small>Vägen är markerad</small></button>
     </div>
+    <p class="note">Memory: den rosa linjen visar rätt väg medan du studerar kartan. Navigator: ingen linje, du hittar vägen själv med blicken och memorerar den. Det är svårare.</p>
 
     <h2>Tempo</h2>
     <div class="seg" id="seg-diff">

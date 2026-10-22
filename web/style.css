@@ -266,3 +266,32 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
   display: inline-block; background: rgba(247, 242, 230, .96); color: var(--ink); font-weight: 800;
   padding: 8px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,.2);
 }
+
+/* Startskärm */
+#splash {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 36px);
+  background: linear-gradient(#bfe8ff 0%, #e2fbff 60%, #f3ffe8 100%);
+  transition: opacity .5s ease-out;
+}
+#splash.done { opacity: 0; pointer-events: none; }
+#splash .logo { order: 1; display: flex; flex-direction: column; align-items: center; line-height: .95; text-align: center; margin-top: 8px; }
+#splash .l1, #splash .l2 {
+  font-size: clamp(54px, 18vw, 84px); font-weight: 900; letter-spacing: -1px;
+  -webkit-text-stroke: 9px #14397d; paint-order: stroke fill;
+  filter: drop-shadow(0 5px 0 #0d2559);
+}
+#splash .l1 { color: #fff; }
+#splash .l2 { color: #5fe0ff; }
+#splash .logo small { margin-top: 14px; font-size: 18px; font-weight: 800; color: #2d6a8f; }
+#splash .art { width: min(100%, 340px); height: auto; flex: 0 1 auto; order: 2; }
+#splash .load {
+  position: relative; width: min(78%, 320px); height: 34px; border-radius: 17px; overflow: hidden;
+  background: #b4b8f2; border: 3px solid #fff; box-shadow: 0 0 0 3px #7c86e8;
+  order: 3;
+}
+#load-fill { height: 100%; width: 0; background: linear-gradient(#2be6ff, #00c4e8); }
+#load-pct { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; color: #fff; -webkit-text-stroke: 3px #4a50b8; paint-order: stroke fill; }
+#splash .ver { order: 4; margin-top: 14px; font-size: 14px; font-weight: 700; color: #8d95e0; }
+.note { font-size: 14px; margin: 6px 0 0; opacity: .8; }
