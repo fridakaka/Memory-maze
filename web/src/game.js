@@ -354,8 +354,8 @@ function buildMazeMesh() {
     mapIcons.add(sprite);
   }
   const goalIcon = makeIconSprite('🏁');
-  const gs = 1.7 + Math.max(maze.width, maze.height) * 0.07;
-  goalIcon.scale.set(gs, gs, 1);
+  const iconSize = 1.7 + Math.max(maze.width, maze.height) * 0.07;
+  goalIcon.scale.set(iconSize, iconSize, 1);
   goalIcon.position.set(gx, 1.6, gz);
   mapIcons.add(goalIcon);
   mazeGroup.add(mapIcons);
