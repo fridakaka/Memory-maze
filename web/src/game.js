@@ -177,7 +177,8 @@ function hideWall(i) {
 }
 
 /** Material som kan ha olika genomskinlighet per instans. */
-function ghostMaterial(base) {
+/** fade: hur mycket av instansens genomskinlighet som gäller (ovansidan tonas ut mindre, så väggens form syns). */
+function ghostMaterial(base, fade = 1) {
   const m = base.clone();
   m.transparent = true;
   m.depthWrite = false;
@@ -187,7 +188,7 @@ function ghostMaterial(base) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInstAlpha = instAlpha;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vInstAlpha;')
-      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vInstAlpha );')
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * mix(1.0, vInstAlpha, ' + fade.toFixed(2) + ') );')
       // Lysande delar (neonlister) tonas ut extra mycket, annars ser väggen ut som glas med linjer
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vInstAlpha * vInstAlpha * vInstAlpha;');
   };
@@ -277,7 +278,7 @@ function buildMazeMesh() {
   const gt = wallTopGeometry().clone();
   gt.setAttribute('instAlpha', ghostAlpha);
   ghostSides = new THREE.InstancedMesh(gs, ghostMaterial(mats.wallSide), GHOST_MAX);
-  ghostTops = new THREE.InstancedMesh(gt, ghostMaterial(mats.wallTop), GHOST_MAX);
+  ghostTops = new THREE.InstancedMesh(gt, ghostMaterial(mats.wallTop, 0.3), GHOST_MAX);
   ghostSides.count = ghostTops.count = 0;
   ghostSides.frustumCulled = ghostTops.frustumCulled = false;
   ghostSides.renderOrder = ghostTops.renderOrder = 5;
