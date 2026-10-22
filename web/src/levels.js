@@ -27,16 +27,22 @@ export async function loadLevelData() {
   }
 }
 
-export const isIntro = (id) => id > 1000;
+export const isIntro = (id) => id > 1000 && id < 2000;
+export const isExpedition = (id) => id >= 2000;
 
 /** Nummer på introduktionsbanorna i ordning. */
 export function introIds() {
   return [...store.keys()].filter(isIntro).sort((a, b) => a - b);
 }
 
+/** Expeditionerna i ordning. */
+export function expeditionIds() {
+  return [...store.keys()].filter(isExpedition).sort((a, b) => a - b);
+}
+
 /** Antal vanliga banor i datan (minst 60 även utan data). */
 export function levelCount() {
-  const ids = [...store.keys()].filter((id) => !isIntro(id));
+  const ids = [...store.keys()].filter((id) => id < 1000);
   return ids.length ? Math.max(...ids) : 60;
 }
 
@@ -48,29 +54,32 @@ export function levelInfo(id) {
       id, width: data.width, height: data.height, mode: data.mode, d: data.d,
       themeId: data.theme, weatherId: data.weather, label: data.label ?? null,
       rating: data.rating ?? null, intro: data.intro ?? null, fromData: true,
+      expedition: data.expedition ? { title: data.expedition.title, after: data.expedition.after, legs: data.expedition.legs.length } : null,
     };
   }
   const p = levelParams(id);
   const themeId = themeIdFor(id);
   return {
     id, width: p.width, height: p.height, mode: p.mode, d: p.d,
-    themeId, weatherId: weatherIdFor(id, themeId), label: null, rating: null, intro: null, fromData: false,
+    themeId, weatherId: weatherIdFor(id, themeId), label: null, rating: null, intro: null, fromData: false, expedition: null,
   };
 }
 
 /**
  * Bygger en bana som kan spelas. sizeOverride ger en labyrint av vald storlek i stället
- * för den sparade (för testinställningar).
+ * för den sparade (för testinställningar). leg är vilken del av en expedition som byggs.
  */
-export function buildLevel(id, sizeOverride = 0) {
-  const data = store.get(id);
-  if (data && !sizeOverride) {
+export function buildLevel(id, sizeOverride = 0, leg = 0) {
+  const entry = store.get(id);
+  const data = entry?.expedition ? entry.expedition.legs[leg] : entry;
+  if (data && (!sizeOverride || entry.expedition)) {
     const maze = decodeMaze(data);
     maze.spots = (data.spots ?? []).map((s) => ({ ...s, used: false }));
     maze.landmarks = (data.landmarks ?? []).map((l) => ({ ...l }));
     return {
       maze, mode: data.mode, d: data.d, themeId: data.theme, weatherId: data.weather,
       plan: data.plan ?? {}, intro: data.intro ?? null, rating: data.rating ?? null, label: data.label ?? null,
+      expedition: entry.expedition ? { title: entry.expedition.title, leg, legs: entry.expedition.legs.length } : null,
     };
   }
   const params = levelParams(id);
@@ -81,6 +90,6 @@ export function buildLevel(id, sizeOverride = 0) {
   const themeId = themeIdFor(id);
   return {
     maze, mode: params.mode, d: params.d, themeId, weatherId: weatherIdFor(id, themeId),
-    plan: null, intro: null, rating: null, label: null,
+    plan: null, intro: null, rating: null, label: null, expedition: null,
   };
 }

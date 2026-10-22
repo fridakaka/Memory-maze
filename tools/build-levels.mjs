@@ -12,6 +12,7 @@ import {
 import { themeIdFor, weatherIdFor } from '../web/src/plan.js';
 import { analyzeLevel } from '../web/src/analysis.js';
 import { INTRO_LEVELS } from './intro-levels.mjs';
+import { EXPEDITIONS } from './expeditions.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'levels');
 const TOTAL = Number(process.env.TOTAL_LEVELS ?? 100);
@@ -120,12 +121,62 @@ for (const intro of INTRO_LEVELS) {
   });
 }
 
+// ---- Expeditioner ----
+for (const exp of EXPEDITIONS) {
+  const legs = [];
+  for (let leg = 0; leg < exp.legs; leg++) {
+    let chosen = null;
+    let lastProblems = [];
+    for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
+      const seed = exp.seed + leg * 7919 + attempt * 100003;
+      const params = {
+        width: exp.size[0], height: exp.size[1], loops: Math.round(exp.d * 7), seed,
+      };
+      const maze = generateMaze(params);
+      const spots = exp.kind === 'monster' ? pickHidingSpots(maze, seed) : [];
+      const landmarks = pickLandmarks(maze, exp.d, seed, spots);
+      const result = analyzeLevel(maze, { mode: exp.kind, d: exp.d });
+      const key = JSON.stringify(maze.open);
+      if (seenMazes.has(key)) result.problems.push(`Samma bana som ${seenMazes.get(key)}`);
+      if (spots.some((sp) => landmarks.some((l) => l.x === sp.x && l.y === sp.y))) result.problems.push('Landmärke på gömställe');
+      if (new Set(landmarks.map((l) => l.type)).size !== landmarks.length) result.problems.push('Samma landmärke två gånger');
+      if (!result.problems.length) {
+        seenMazes.set(key, `${exp.title} del ${leg + 1}`);
+        chosen = { maze, spots, landmarks, result };
+      } else {
+        lastProblems = result.problems;
+      }
+    }
+    if (!chosen) {
+      failures.push(`${exp.title} del ${leg + 1}: ${lastProblems.join('; ')}`);
+      continue;
+    }
+    const { maze, spots, landmarks, result } = chosen;
+    legs.push({
+      ...encodeMaze(maze),
+      mode: exp.kind,
+      d: exp.d,
+      theme: exp.theme,
+      weather: exp.weather,
+      spots: spots.map(({ x, y, dir }) => ({ x, y, dir })),
+      landmarks,
+      plan: planFor(maze, exp.kind, exp.d),
+      rating: result.rating,
+      label: result.label,
+      metrics: result.metrics,
+    });
+  }
+  if (legs.length === exp.legs) {
+    entries.push({ id: exp.id, ...legs[0], expedition: { title: exp.title, after: exp.after, legs } });
+  }
+}
+
 // ---- Skriv resultatet ----
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'levels.json'), JSON.stringify({ version: 1, levels: entries }));
 
 const lines = [];
-lines.push(`Banor: ${entries.length} (${TOTAL} vanliga och ${INTRO_LEVELS.length} introduktionsbanor)`);
+lines.push(`Banor: ${entries.length} (${TOTAL} vanliga, ${INTRO_LEVELS.length} introduktionsbanor och ${EXPEDITIONS.length} expeditioner)`);
 lines.push('');
 lines.push('Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ');
 let prev = 0;
@@ -141,8 +192,14 @@ for (const e of entries.filter((x) => x.id <= TOTAL)) {
 void prev;
 lines.push('');
 lines.push('Introduktionsbanor:');
-for (const e of entries.filter((x) => x.id > 1000)) {
+for (const e of entries.filter((x) => x.id > 1000 && x.id < 2000)) {
   lines.push(`  ${e.id} ${e.intro.title}: ${e.width}x${e.height}, väg ${e.metrics.pathLen}, val ${e.metrics.decisions}, betyg ${e.rating} (${e.label})`);
+}
+lines.push('');
+lines.push('Expeditioner:');
+for (const e of entries.filter((x) => x.id >= 2000)) {
+  const parts = e.expedition.legs.map((l) => `${l.width}x${l.height} (väg ${l.metrics.pathLen}, val ${l.metrics.decisions}, betyg ${l.rating})`);
+  lines.push(`  ${e.id} ${e.expedition.title} [${e.mode}]: ${parts.join(' → ')}`);
 }
 const byLabel = { easy: 0, mid: 0, hard: 0 };
 for (const e of entries.filter((x) => x.id <= TOTAL)) byLabel[e.label]++;

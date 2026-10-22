@@ -28,9 +28,10 @@
   <div id="hint" class="hidden"></div>
   <button id="ready" class="hidden">Jag är redo</button>
   <button id="back-study" class="round hidden" aria-label="Tillbaka till menyn">←</button>
+  <button id="peek-close" class="hidden">Stäng kartan</button>
   <button id="tilt" class="round hidden" aria-label="Ändra vinkeln på kartan">◢</button>
 
-  <div id="compass" class="hidden"><div id="needle"><span>N</span></div></div>
+  <div id="compass" class="hidden"><div id="needle"><span>N</span></div><span id="peek-count" class="hidden"></span></div>
 
   <div id="controls" class="hidden">
     <button data-rel="left" aria-label="Vänster">←</button>
@@ -93,6 +94,9 @@
       </label>
       <label>Tidsgräns, faktor
         <input id="dbg-time" type="number" min="0.3" max="5" step="0.1" value="1">
+      </label>
+      <label>Lås upp kikar (5 st)
+        <input id="dbg-peeks" type="checkbox">
       </label>
       <label>Lås upp alla figurer
         <input id="dbg-unlock" type="checkbox">

@@ -6,7 +6,7 @@ import {
   DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
-import { buildLevel, levelInfo, levelCount, introIds, loadLevelData, isIntro } from './levels.js';
+import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
 const $ = (id) => document.getElementById(id);
@@ -25,7 +25,11 @@ function loadSave() {
 function writeSave() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* privat läge */ }
 }
-const save = Object.assign({ stars: {}, lives: 5 }, loadSave());
+const save = Object.assign({ stars: {}, lives: 5, peeks: 0, peekUnlocked: false, hardClears: 0, earn: 0 }, loadSave());
+// Kikar: tre svåra banor låser upp dem (fem gratis), sedan ger var tredje nyklarad bana en ny.
+const PEEK_HARD_TO_UNLOCK = 3;
+const PEEK_FREE = 5;
+const PEEK_EVERY = 3;
 
 // ---------- Inställningar ----------
 const settings = { mode: 'navigator', difficulty: 'medium', level: 1 };
@@ -198,6 +202,7 @@ function setWallMatrix(i, scaleY) {
 }
 let pathGroup = null;
 let mapIcons = null;
+let youMarker = null;
 const cellPos = (x, y) => new THREE.Vector3(x - maze.width / 2 + 0.5, 0, y - maze.height / 2 + 0.5);
 
 let floorMesh = null;
@@ -330,6 +335,20 @@ function buildMazeMesh() {
     mapIcons.add(sprite);
   }
   mazeGroup.add(mapIcons);
+
+  // "Du är här": en pulserande ring, en pil åt blickriktningen och en nål. Syns bara i kikaren.
+  youMarker = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.06, 40), mats.start);
+  ring.position.y = 0.1;
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 16), mats.start);
+  arrow.rotation.x = Math.PI / 2;
+  arrow.position.set(0, 0.9, 0.9);
+  const pin = makeIconSprite('📍');
+  pin.scale.set(2.4, 2.4, 1);
+  pin.position.set(0, 2.4, 0);
+  youMarker.add(ring, arrow, pin);
+  youMarker.visible = false;
+  mazeGroup.add(youMarker);
   scene.add(mazeGroup);
 }
 
@@ -687,16 +706,27 @@ const S = {
   anim: { t: 0, reaction: null, reactionT: 0, blinkIn: 2, glanceT: -1, glanceIn: 2 },
 };
 
-function startLevel() {
+/** Tidsgräns eller stjärngräns för en bana (utan introduktioner). */
+function limitOf(L, dbgTime) {
+  if (L.mode === 'monster') return monsterPlan(L.maze, L.d, settings.difficulty, dbgTime).starLimit;
+  if (L.mode === 'free') return Math.ceil(perfectTime(L.maze) * 2.5);
+  return timeLimit(L.maze, L.d, settings.difficulty, dbgTime);
+}
+
+function startLevel(leg = 0, carry = null) {
+  if (typeof leg !== 'number') leg = 0; // anrop från en knapptryckning
   const level = settings.level;
   save.level = level;
   writeSave();
   show($('sheet-settings'), false);
   show($('sheet-hero'), false);
   const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
-  const L = buildLevel(level, dbgSize ? Math.max(4, Math.min(40, dbgSize)) : 0);
+  const L = buildLevel(level, dbgSize ? Math.max(4, Math.min(40, dbgSize)) : 0, leg);
   maze = L.maze;
   S.intro = L.intro;
+  S.exp = L.expedition;
+  S.peek = false;
+  show($('peek-close'), false);
   S.levelId = level;
   S.modeNow = L.intro?.forceMode ?? settings.mode;
   applyTheme(themeFor(level, L.themeId), Math.max(maze.width, maze.height));
@@ -735,9 +765,14 @@ function startLevel() {
   } else {
     S.limit = L.intro ? L.plan.timeLimit : timeLimit(maze, L.d, settings.difficulty, dbgTime);
   }
-  S.timeLeft = S.limit;
-  S.elapsed = 0;
-  S.wrongTurns = 0;
+  if (S.exp) {
+    // En expedition har en gemensam gräns för alla delar, som förs vidare vid varje checkpoint.
+    if (carry) S.limit = carry.limit;
+    else for (let k = 1; k < S.exp.legs; k++) S.limit += limitOf(buildLevel(level, 0, k), dbgTime);
+  }
+  S.timeLeft = carry ? carry.timeLeft : S.limit;
+  S.elapsed = carry ? carry.elapsed : 0;
+  S.wrongTurns = carry ? carry.wrongTurns : 0;
   S.studyTotal = dbgStudy || L.intro?.studySeconds || STUDY_SECONDS[settings.difficulty];
   S.studyLeft = S.studyTotal;
   S.node = { ...maze.start };
@@ -784,7 +819,8 @@ function startLevel() {
   show($('compass'), false);
   show($('rear'), false);
   const wIcon = weather.emoji ? ` ${weather.emoji}` : '';
-  const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}` : `Bana ${level}`;
+  const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}`
+    : S.exp ? `${S.exp.title} · del ${S.exp.leg + 1}/${S.exp.legs}` : `Bana ${level}`;
   $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   show($('danger'), false);
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
@@ -904,11 +940,25 @@ function arriveAtNode(animate = true) {
   S.run = null;
   const dirs = openDirs(maze, S.node.x, S.node.y);
   const isGoal = S.node.x === maze.goal.x && S.node.y === maze.goal.y;
-  if (isGoal) return finish(true);
+  if (isGoal) return S.exp && S.exp.leg < S.exp.legs - 1 ? checkpoint() : finish(true);
   react(animate && dirs.length === 1 ? 'deadend' : 'look');
   applyGuide();
   refreshControls();
   if (animate && dirs.length === 1) coach('deadend');
+}
+
+/** Framme vid en checkpoint i en expedition: nästa del av kartan visas. */
+function checkpoint() {
+  const next = S.exp.leg + 1;
+  const carry = { limit: S.limit, timeLeft: S.timeLeft, elapsed: S.elapsed, wrongTurns: S.wrongTurns };
+  react('win');
+  for (const id of ['controls', 'compass', 'danger', 'rear', 'leave', 'hint']) show($(id), false);
+  showDialog({
+    title: 'Checkpoint!',
+    text: `Bra gjort! Del ${next} av ${S.exp.legs} är klar. Nu kommer nästa del av kartan. Tiden och dina felval följer med.`,
+    primary: 'Fortsätt',
+    onPrimary: () => startLevel(next, carry),
+  });
 }
 
 function spotHere() {
@@ -931,10 +981,74 @@ function refreshControls() {
   show($('hide'), idle && !S.hidden && !!spotHere());
   show($('unhide'), idle && S.hidden);
   const waiting = S.phase === 'play' && S.run === null;
-  show($('compass'), waiting && !S.hidden);
+  show($('compass'), waiting && (!S.hidden || peeksOn()));
+  updatePeekBadge();
   if (waiting && !S.hidden && !S.compassSeen) { S.compassSeen = true; coach('compass'); }
   if (idle && !S.hidden && spotHere() && !S.barrelSeen) { S.barrelSeen = true; coach('barrel'); }
+  if (S.peek) for (const id of ['hide', 'unhide', 'compass', 'hint', 'controls', 'leave', 'rear']) show($(id), false);
 }
+
+// ---------- Kikar: titta på kartan medan tiden går ----------
+const peeksOn = () => save.peekUnlocked && !S.intro;
+function updatePeekBadge() {
+  const badge = $('peek-count');
+  show(badge, peeksOn());
+  badge.textContent = `👁 ${save.peeks}`;
+}
+
+function openPeek() {
+  if (S.phase !== 'play' || S.run || S.peek || S.paused || !peeksOn()) return;
+  if (save.peeks <= 0) {
+    showDialog({
+      title: 'Slut på kikar',
+      text: 'Du får en ny kik för var tredje bana du klarar för första gången. Du kan också köpa fem kikar för 9 kr. (Testversion: ingenting debiteras.)',
+      primary: 'Okej',
+      secondary: 'Köp 5 för 9 kr',
+      onSecondary: () => { save.peeks += PEEK_FREE; writeSave(); updatePeekBadge(); },
+    });
+    return;
+  }
+  save.peeks--;
+  writeSave();
+  S.peek = true;
+  // Väggar som är genomskinliga just nu görs solida igen så att kartan blir hel.
+  for (const id of cut.keys()) setWallMatrix(id, 1);
+  cut.clear();
+  ghostSides.count = ghostTops.count = 0;
+  setMapWalls(true);
+  scene.fog = null;
+  scene.background = lawnColor;
+  pathGroup.visible = false;
+  mapIcons.visible = true;
+  youMarker.visible = true;
+  camera = mapCam;
+  S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.mapPitch = 1.05;
+  fitMapCamera();
+  show($('peek-close'));
+  show($('tilt'));
+  refreshControls();
+}
+
+function closePeek() {
+  if (!S.peek) return;
+  S.peek = false;
+  setMapWalls(false);
+  scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
+  scene.background = skyTex;
+  mapIcons.visible = false;
+  youMarker.visible = false;
+  camera = playCam;
+  show($('peek-close'), false);
+  show($('tilt'), false);
+  if (S.phase === 'play') {
+    show($('controls'));
+    show($('leave'));
+    show($('rear'), S.kind === 'monster');
+    refreshControls();
+  }
+}
+$('peek-close').onclick = closePeek;
+$('compass').onclick = openPeek;
 
 /** Knappen "Göm dig" är låst när monstret är så nära att det ser dig. */
 const SEEN_DIST = 3.5;
@@ -1364,7 +1478,30 @@ function updateCompass() {
 }
 
 // ---------- Slut ----------
+/** Räknar en nyklarad bana mot kikar. Returnerar text till resultatet och om kikar just låstes upp. */
+function awardClear(level) {
+  const key = levelType(level).key;
+  if (!save.peekUnlocked) {
+    if (key === 'hard' || key === 'expedition') save.hardClears = (save.hardClears || 0) + 1;
+    if (save.hardClears >= PEEK_HARD_TO_UNLOCK) {
+      save.peekUnlocked = true;
+      save.peeks = (save.peeks || 0) + PEEK_FREE;
+      save.earn = 0;
+      return { text: ` · +${PEEK_FREE} kikar 👁`, unlocked: true };
+    }
+    return { text: '', unlocked: false };
+  }
+  save.earn = (save.earn || 0) + 1;
+  if (save.earn >= PEEK_EVERY) {
+    save.earn = 0;
+    save.peeks = (save.peeks || 0) + 1;
+    return { text: ' · +1 kik 👁', unlocked: false };
+  }
+  return { text: '', unlocked: false };
+}
+
 function finish(win, reason = 'time') {
+  closePeek();
   S.phase = 'ended';
   react(win ? 'win' : 'lose');
   show($('controls'), false);
@@ -1379,7 +1516,9 @@ function finish(win, reason = 'time') {
   const key = `${S.modeNow}:${settings.difficulty}:${settings.level}`;
 
   let stars = 0;
+  let award = { text: '', unlocked: false };
   if (win) {
+    if (!S.intro && bestStars(settings.level) === 0) award = awardClear(settings.level);
     stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
@@ -1394,12 +1533,19 @@ function finish(win, reason = 'time') {
     $('res-stars').innerHTML = [0, 1, 2]
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
-      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval`
+      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${award.text}`
       : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
         : save.lives > 0 ? `Du har ${save.lives} liv kvar.` : 'Slut på liv. Du får fem nya.';
     if (!win && !S.intro && save.lives === 0) { save.lives = MAX_LIVES; writeSave(); }
     show($('res-next'), win);
     show($('result'));
+    if (award.unlocked) {
+      showDialog({
+        title: 'Ny hjälp: Kika!',
+        text: `Du har klarat ${PEEK_HARD_TO_UNLOCK} svåra banor och får ${PEEK_FREE} kikar. När du står still kan du trycka på kompassen för att se kartan och var du är. Tiden och monstret fortsätter, så använd dem klokt. Du får en ny kik för var ${PEEK_EVERY}:e bana du klarar.`,
+        primary: 'Tack!',
+      });
+    }
   }, win ? 1400 : 1200);
 }
 
@@ -1438,7 +1584,7 @@ function sampleWalls(from, to, out) {
 }
 
 function updateFade(dt) {
-  if (S.phase === 'play' && walls.length) {
+  if (S.phase === 'play' && !S.peek && walls.length) {
     fadeTick = (fadeTick + 1) % 2; // räcker att kolla varannan bildruta
     if (fadeTick === 0) {
       const to = new THREE.Vector3(hero.position.x, 0.5, hero.position.z);
@@ -1545,6 +1691,12 @@ function frame(now) {
   }
 
   animateMonster(dt);
+  if (S.peek) {
+    monster.visible = false; // monstret visas inte i kikaren
+    youMarker.position.set(hero.position.x, 0, hero.position.z);
+    youMarker.rotation.y = hero.rotation.y;
+    youMarker.scale.setScalar((1 + Math.sin(performance.now() / 250) * 0.12) / Math.sqrt(S.mapZoom));
+  }
   if (S.phase !== 'menu' && S.phase !== 'study') {
     animateHero(dt);
     // Kameran vrider sig mjukt och långsamt efter figuren (mindre åksjuka).
@@ -1579,7 +1731,7 @@ function frame(now) {
     updateFx(dt);
     beam.visible = weather.id === 'night' && (S.phase === 'play' || S.phase === 'ended');
     renderer.render(scene, camera);
-    if (S.phase === 'play' && S.kind === 'monster') renderRear();
+    if (S.phase === 'play' && S.kind === 'monster' && !S.peek) renderRear();
   }
   requestAnimationFrame(frame);
 }
@@ -1589,7 +1741,12 @@ function frame(now) {
 function levelOrder() {
   const ids = [...introIds()];
   const n = levelCount();
-  for (let l = 1; l <= n; l++) ids.push(l);
+  const exps = expeditionIds().map((id) => ({ id, after: levelInfo(id).expedition?.after ?? n }));
+  for (let l = 1; l <= n; l++) {
+    ids.push(l);
+    for (const e of exps) if (e.after === l) ids.push(e.id);
+  }
+  for (const e of exps) if (e.after > n) ids.push(e.id);
   return ids;
 }
 
@@ -1597,6 +1754,7 @@ function levelOrder() {
 function levelType(level) {
   const p = levelInfo(level);
   if (p.intro) return { key: 'intro', label: 'Introduktion', p };
+  if (p.expedition) return { key: 'expedition', label: 'Expedition', p };
   if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
   const band = p.label ?? (p.d < 0.35 ? 'easy' : p.d < 0.65 ? 'mid' : 'hard');
   return { key: band, label: { easy: 'Lätt', mid: 'Medel', hard: 'Svår' }[band], p };
@@ -1668,11 +1826,14 @@ function renderMap(scroll = false) {
     const best = bestStars(id);
     const sel = id === settings.level;
     const isI = isIntro(id);
-    const number = isI ? intros.indexOf(id) + 1 : id;
+    const exps = expeditionIds();
+    const isE = t.key === 'expedition';
+    const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : `Bana ${id}`}, ${t.label}">`
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : `Bana ${id}`}, ${t.label}">`
       + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
+      + (isE ? '<span class="mons">🧭</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
       + `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span></button>`;
@@ -1695,6 +1856,9 @@ function refreshMenu(scroll = false) {
     const n = introIds().indexOf(settings.level) + 1;
     $('lvl-info').textContent = `Introduktion ${n}: ${t.p.intro.title} · ${t.p.width}×${t.p.height} rutor`;
     $('play').textContent = `Spela introduktion ${n}`;
+  } else if (t.p.expedition) {
+    $('lvl-info').textContent = `${t.p.expedition.title} · ${t.p.expedition.legs} delar med checkpoints · ${th.name} · ${t.p.width}×${t.p.height} rutor per del`;
+    $('play').textContent = `Spela ${t.p.expedition.title.toLowerCase()}`;
   } else {
     $('lvl-info').textContent = `Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
     $('play').textContent = `Spela bana ${settings.level}`;
@@ -1740,6 +1904,12 @@ $('hero-close').onclick = () => show($('sheet-hero'), false);
 $('settings-btn').onclick = () => show($('sheet-settings'));
 $('settings-close').onclick = () => { show($('sheet-settings'), false); refreshMenu(); };
 
+$('dbg-peeks').checked = !!save.peekUnlocked;
+$('dbg-peeks').onchange = () => {
+  save.peekUnlocked = $('dbg-peeks').checked;
+  if (save.peekUnlocked) save.peeks = Math.max(save.peeks || 0, PEEK_FREE);
+  writeSave();
+};
 $('dbg-unlock').checked = !!save.unlockAll;
 $('dbg-unlock').onchange = () => { save.unlockAll = $('dbg-unlock').checked; writeSave(); };
 
@@ -1754,9 +1924,9 @@ function bindSeg(id, field) {
 bindSeg('seg-mode', 'mode');
 bindSeg('seg-diff', 'difficulty');
 
-$('play').onclick = startLevel;
+$('play').onclick = () => startLevel();
 $('ready').onclick = beginPlay;
-$('res-again').onclick = startLevel;
+$('res-again').onclick = () => startLevel();
 $('res-next').onclick = () => {
   const ids = levelOrder();
   const k = ids.indexOf(settings.level);
@@ -1764,6 +1934,8 @@ $('res-next').onclick = () => {
   startLevel();
 };
 function backToMenu() {
+  S.peek = false;
+  show($('peek-close'), false);
   S.phase = 'menu';
   S.paused = false;
   show($('leave'), false);
@@ -1811,6 +1983,7 @@ for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
 }
 // Svajpa för att titta runt medan man är gömd; nyp, dra och rulla för att zooma kartan.
 const pointers = new Map();
+const mapView = () => S.phase === 'study' || S.peek;
 const ray = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 /** Var på marken en punkt på skärmen pekar. */
@@ -1848,7 +2021,7 @@ window.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
   if (!p || S.paused) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
-  if (S.phase === 'study') {
+  if (mapView()) {
     if (pointers.size >= 2) {
       const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)[1];
       const mx = (e.clientX + other.x) / 2, my = (e.clientY + other.y) / 2;
@@ -1874,12 +2047,12 @@ const endPointer = (e) => pointers.delete(e.pointerId);
 window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
 window.addEventListener('wheel', (e) => {
-  if (S.phase !== 'study' || S.paused || e.target !== $('scene')) return;
+  if (!mapView() || S.paused || e.target !== $('scene')) return;
   e.preventDefault();
   setMapZoom(S.mapZoom * Math.exp(-e.deltaY * 0.002), e.clientX, e.clientY);
 }, { passive: false });
 $('scene').addEventListener('dblclick', (e) => {
-  if (S.phase === 'study') setMapZoom(S.mapZoom > 1.2 ? 1 : 2.5, e.clientX, e.clientY);
+  if (mapView()) setMapZoom(S.mapZoom > 1.2 ? 1 : 2.5, e.clientX, e.clientY);
 });
 
 $('hide').onclick = hide;
@@ -1890,10 +2063,11 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && dialogHandlers) closeDialog('primary');
   else if (e.key === 'Enter' && S.phase === 'study' && !S.paused) beginPlay();
   if (e.key === 'h') (S.hidden ? unhide : hide)();
+  if (e.key === 'Escape') closePeek();
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, startLevel, beginPlay, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
