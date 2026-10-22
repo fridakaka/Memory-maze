@@ -451,11 +451,17 @@ function fitMapCamera() {
   if (halfW / aspect > halfH) halfH = halfW / aspect;
   else halfW = halfH * aspect;
   const shift = halfH * 0.12;
-  mapCam.left = -halfW; mapCam.right = halfW;
-  mapCam.top = halfH + shift; mapCam.bottom = -halfH + shift;
-  mapCam.position.set(0, 40, 0);
+  const z = S.mapZoom;
+  // Kartan kan zoomas och dras. Se till att man inte kan dra bort den från skärmen.
+  const slackX = Math.max(0, (maze.width / 2 + 0.6) - halfW / z);
+  const slackZ = Math.max(0, (maze.height / 2 + 0.6) - halfH / z + shift / z);
+  S.mapPanX = Math.max(-slackX, Math.min(slackX, S.mapPanX));
+  S.mapPanZ = Math.max(-slackZ - 0.01, Math.min(slackZ + 0.01, S.mapPanZ));
+  mapCam.left = -halfW / z; mapCam.right = halfW / z;
+  mapCam.top = (halfH + shift) / z; mapCam.bottom = (-halfH + shift) / z;
+  mapCam.position.set(S.mapPanX, 40, S.mapPanZ);
   mapCam.up.set(0, 0, -1);
-  mapCam.lookAt(0, 0, 0);
+  mapCam.lookAt(S.mapPanX, 0, S.mapPanZ);
   mapCam.updateProjectionMatrix();
 }
 
@@ -665,7 +671,7 @@ const S = {
   node: null, // nuvarande nod {x,y}
   heading: 'N', // blickriktning i nuvarande nod
   run: null, // { pts:[Vector3], seg, t, to, heading, wrong }
-  yaw: 0, camYaw: 0, camVel: 0,
+  yaw: 0, camYaw: 0, camVel: 0, lookYaw: 0, mapZoom: 1, mapPanX: 0, mapPanZ: 0,
   kind: 'time', uturn: false, shake: 0, shakeBurst: 0, vibrateIn: 0, mon: null, difficulty: 0, hidden: false,
   limit: 0, timeLeft: 0, studyLeft: 0, studyTotal: 0,
   wrongTurns: 0, elapsed: 0,
@@ -754,6 +760,8 @@ function startLevel() {
   scene.fog = null;
   scene.background = lawnColor;
   camera = mapCam;
+  S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0;
+  fitMapCamera();
   S.phase = 'study';
 
   show($('menu'), false);
@@ -769,7 +777,7 @@ function startLevel() {
   $('hud-level').textContent = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   show($('danger'), false);
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
-  $('hud-phase').textContent = S.kind === 'monster' ? `${study} – tunnor är gömställen` : study;
+  $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp för att zooma';
   updateHud();
   coach('study');
 }
@@ -1320,7 +1328,8 @@ function snapCamera() {
 function placeCamera(blend) {
   // Följ figurens plats på marken, inte dess studsande löpsteg.
   const pos = new THREE.Vector3(hero.position.x, 0, hero.position.z);
-  const fwd = new THREE.Vector3(Math.sin(S.camYaw), 0, Math.cos(S.camYaw));
+  const viewYaw = S.camYaw + S.lookYaw;
+  const fwd = new THREE.Vector3(Math.sin(viewYaw), 0, Math.cos(viewYaw));
   const target = pos.clone().addScaledVector(fwd, 1.3);
   target.y = 0.55;
   const want = pos.clone().addScaledVector(fwd, -3.4);
@@ -1337,7 +1346,7 @@ function placeCamera(blend) {
 
 function updateCompass() {
   // Visar var norr är relativt figurens riktning (framåt = uppåt).
-  const deg = ((S.camYaw - Math.PI) * 180) / Math.PI;
+  const deg = ((S.camYaw + S.lookYaw - Math.PI) * 180) / Math.PI;
   $('needle').style.transform = `rotate(${deg}deg)`;
 }
 
@@ -1534,8 +1543,14 @@ function frame(now) {
     S.camVel += (want - S.camVel) * Math.min(1, dt * (S.uturn ? 9 : 3));
     if (S.uturn && Math.abs(angleDiff(S.camYaw, S.yaw)) < 0.3) S.uturn = false;
     S.camYaw += S.camVel * dt;
+    if (!S.hidden && S.lookYaw !== 0) {
+      S.lookYaw *= Math.max(0, 1 - dt * 6);
+      if (Math.abs(S.lookYaw) < 0.01) S.lookYaw = 0;
+    }
     placeCamera(Math.min(1, dt * 12));
     updateCompass();
+    const lookHint = ' · Svajpa för att titta runt';
+    if (S.phase === 'play' && S.hidden && !$('hud-phase').textContent.endsWith(lookHint)) $('hud-phase').textContent += lookHint;
   } else if (S.phase === 'study') {
     animateHero(dt);
   }
@@ -1780,6 +1795,62 @@ $('reset-save').onclick = () => {
 for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
   btn.addEventListener('click', () => choose(btn.dataset.rel));
 }
+// Svajpa för att titta runt medan man är gömd; nyp, dra och rulla för att zooma kartan.
+const pointers = new Map();
+function mapWorldAt(sx, sy) {
+  const w = window.innerWidth, h = window.innerHeight;
+  return {
+    x: mapCam.position.x + mapCam.left + (sx / w) * (mapCam.right - mapCam.left),
+    z: mapCam.position.z - (mapCam.top - (sy / h) * (mapCam.top - mapCam.bottom)),
+  };
+}
+function setMapZoom(zoom, sx, sy) {
+  const before = mapWorldAt(sx, sy);
+  S.mapZoom = Math.max(1, Math.min(5, zoom));
+  fitMapCamera();
+  const after = mapWorldAt(sx, sy);
+  S.mapPanX += before.x - after.x;
+  S.mapPanZ += before.z - after.z;
+  fitMapCamera();
+}
+window.addEventListener('pointerdown', (e) => {
+  if (e.target !== $('scene') || S.paused) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+});
+window.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId);
+  if (!p || S.paused) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  if (S.phase === 'study') {
+    if (pointers.size >= 2) {
+      const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)[1];
+      const mx = (e.clientX + other.x) / 2, my = (e.clientY + other.y) / 2;
+      const d0 = Math.hypot(p.x - other.x, p.y - other.y) || 1;
+      const d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+      setMapZoom(S.mapZoom * (d1 / d0), mx, my);
+    } else if (S.mapZoom > 1) {
+      const u = (mapCam.right - mapCam.left) / window.innerWidth;
+      S.mapPanX -= dx * u;
+      S.mapPanZ -= dy * u;
+      fitMapCamera();
+    }
+  } else if (S.phase === 'play' && S.hidden) {
+    S.lookYaw -= dx * 0.01;
+  }
+  p.x = e.clientX; p.y = e.clientY;
+});
+const endPointer = (e) => pointers.delete(e.pointerId);
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+window.addEventListener('wheel', (e) => {
+  if (S.phase !== 'study' || S.paused || e.target !== $('scene')) return;
+  e.preventDefault();
+  setMapZoom(S.mapZoom * Math.exp(-e.deltaY * 0.002), e.clientX, e.clientY);
+}, { passive: false });
+$('scene').addEventListener('dblclick', (e) => {
+  if (S.phase === 'study') setMapZoom(S.mapZoom > 1.2 ? 1 : 2.5, e.clientX, e.clientY);
+});
+
 $('hide').onclick = hide;
 $('unhide').onclick = unhide;
 window.addEventListener('keydown', (e) => {
