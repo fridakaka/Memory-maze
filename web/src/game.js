@@ -94,6 +94,30 @@ function applyTheme(t, size) {
   lawnColor.set(t.ground);
 }
 
+/** Kartvyn ovanifrån: släta, kontrastrika färger och inga skuggor, så att gångarna lätt går att läsa. */
+const MAP_COLORS = { wall: 0xf1ead6, floor: 0x2f3745, background: 0x1d222b };
+function setMapLook(on) {
+  if (on) {
+    mats.wallTop.map = null;
+    mats.wallTop.color.setHex(MAP_COLORS.wall);
+    mats.floor.map = null;
+    mats.floor.emissiveMap = null;
+    mats.floor.emissive.setHex(0x000000);
+    mats.floor.color.setHex(MAP_COLORS.floor);
+    sun.castShadow = false;
+  } else {
+    const a = getAssets(theme, window.innerHeight / window.innerWidth);
+    mats.wallTop.map = a.top;
+    mats.wallTop.color.setHex(0xffffff);
+    mats.floor.map = a.floor;
+    mats.floor.color.setHex(0xffffff);
+    mats.floor.emissiveMap = a.floorGlow;
+    mats.floor.emissive.setHex(a.floorGlow ? 0xffffff : 0x000000);
+    sun.castShadow = true;
+  }
+  mats.wallTop.needsUpdate = mats.floor.needsUpdate = true;
+}
+
 const WALL_H = 1.2;
 const WALL_T = 0.34;
 
@@ -758,7 +782,8 @@ function startLevel() {
   pathGroup.visible = S.modeNow === 'memory';
   mapIcons.visible = true;
   scene.fog = null;
-  scene.background = lawnColor;
+  scene.background = new THREE.Color(MAP_COLORS.background);
+  setMapLook(true);
   camera = mapCam;
   S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0;
   fitMapCamera();
@@ -788,6 +813,7 @@ function beginPlay() {
   mapIcons.visible = false;
   scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
   scene.background = skyTex;
+  setMapLook(false);
   camera = playCam;
   show($('ready'), false);
   show($('back-study'), false);
