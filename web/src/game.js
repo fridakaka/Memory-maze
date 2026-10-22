@@ -175,7 +175,7 @@ function computeWallMatrix(i, scaleY = 1) {
   const w = walls[i];
   // Väggar överlappar i hörnen. Ovansidorna får olika höjd (några centimeter) så att de
   // inte ritas på exakt samma plats och flimrar. Telefoner har ofta sämre djupprecision.
-  const lift = w.sx === w.sz ? 0.03 : w.sx > w.sz ? 0 : 0.015;
+  const lift = w.lift ?? 0.03;
   const height = WALL_H * scaleY + lift;
   dummy.position.set(w.cx, height / 2, w.cz);
   dummy.scale.set(w.sx, height, w.sz);
@@ -209,7 +209,12 @@ function buildMazeMesh() {
   // få ritanrop även på stora banor.
   const addWall = (cx, cz, horizontal, key) => {
     wallIndex.set(key, walls.length);
-    walls.push({ cx, cz, sx: horizontal ? 1 + WALL_T : WALL_T, sz: horizontal ? WALL_T : 1 + WALL_T });
+    // Grannväggar överlappar i skarvar och hörn. Ytor i exakt samma plan "slåss" om pixlarna
+    // (texturen hoppar), så varje vägg får en hårfin egen tjocklek och ovansidans höjd.
+    const [, kx, ky] = key.split(':');
+    const par = horizontal ? (kx & 1) : 2 + (ky & 1);
+    const t = WALL_T + par * 0.007;
+    walls.push({ cx, cz, sx: horizontal ? 1 + t : t, sz: horizontal ? t : 1 + t, lift: 0.004 * (par + 1) });
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
