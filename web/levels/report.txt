@@ -103,8 +103,8 @@ Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  T
  100  monster  1.00  26x27    176   19          75       7    1.20     84  hard
 
 Introduktionsbanor:
-  1001 Så spelar du: 6x5, väg 13, val 3, betyg 23 (easy)
-  1002 Monster: 7x5, väg 14, val 2, betyg 24 (easy)
+  1001 Så spelar du: 6x5, väg 13, val 5, betyg 25 (easy)
+  1002 Monster: 7x5, väg 14, val 3, betyg 28 (easy)
 
 Fördelning: lätta 10, medel 40, svåra 50
 

@@ -77,7 +77,13 @@ for (let level = 1; level <= TOTAL; level++) {
 
 // ---- Introduktionsbanor ----
 for (const intro of INTRO_LEVELS) {
-  const maze = mazeFromPaths(intro.width, intro.height, intro.paths);
+  // Tomma rutor fylls med återvändsgränder. Landmärkenas väggar och gömställen ska stå kvar.
+  const protect = intro.landmarks.filter((l) => l.type !== 'gate').map((l) => `${l.x},${l.y},${l.dir}`);
+  const freeze = [
+    ...intro.spots.map((sp) => `${sp.x},${sp.y}`),
+    ...intro.guides.filter((g) => g.text.includes('Vänd')).map((g) => `${g.x},${g.y}`),
+  ];
+  const maze = mazeFromPaths(intro.width, intro.height, intro.paths, { fill: true, protect, freeze });
   const mode = intro.kind === 'free' ? 'free' : intro.kind;
   const plan = intro.kind === 'time' ? { timeLimit: intro.timeLimit }
     : intro.kind === 'monster' ? { monsterSpeed: intro.monsterSpeed, delay: intro.delay, starLimit: 30 }

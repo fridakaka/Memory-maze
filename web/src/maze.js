@@ -180,7 +180,43 @@ export function decodeMaze(data) {
 }
 
 /** Bygger en bana för hand: varje stig är en lista av celler som förbinds i tur och ordning. */
-export function mazeFromPaths(width, height, paths) {
+/**
+ * Fyller rutor som ingen stig går genom med korta återvändsgränder, så att banan ser ut som
+ * en vanlig labyrint och inte har solida block. Det blir bara träd av nya gångar (inga loopar
+ * eller öppna 2x2-ytor) och den rätta vägen ändras inte.
+ * protect: stängda väggar som ska stå kvar ("x,y,dir"), freeze: rutor som inte får byggas ut.
+ */
+function fillUnused(open, width, height, protect, freeze) {
+  let seed = 7919 + width * 31 + height;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const count = (c) => DIRS.filter((d) => c[d]).length;
+  const blocked = (x, y, d) => protect.has(`${x},${y},${d}`)
+    || protect.has(`${x + DELTA[d].dx},${y + DELTA[d].dy},${OPPOSITE[d]}`);
+  for (;;) {
+    const deadEnds = [];
+    const others = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const c = open[y][x];
+        const n = count(c);
+        if (n === 0 || freeze.has(`${x},${y}`)) continue;
+        for (const d of DIRS) {
+          const nx = x + DELTA[d].dx, ny = y + DELTA[d].dy;
+          if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
+          if (count(open[ny][nx]) !== 0 || blocked(x, y, d)) continue;
+          (n === 1 ? deadEnds : others).push({ x, y, d, nx, ny });
+        }
+      }
+    }
+    const pool = deadEnds.length ? deadEnds : others;
+    if (!pool.length) return;
+    const e = pool[Math.floor(rnd() * pool.length)];
+    open[e.y][e.x][e.d] = true;
+    open[e.ny][e.nx][OPPOSITE[e.d]] = true;
+  }
+}
+
+export function mazeFromPaths(width, height, paths, { fill = false, protect = [], freeze = [] } = {}) {
   const open = Array.from({ length: height }, () =>
     Array.from({ length: width }, () => ({ N: false, E: false, S: false, W: false })));
   for (const path of paths) {
@@ -193,6 +229,7 @@ export function mazeFromPaths(width, height, paths) {
       open[ny][nx][OPPOSITE[d]] = true;
     }
   }
+  if (fill) fillUnused(open, width, height, new Set(protect), new Set(freeze));
   const [sx, sy] = paths[0][0];
   const [gx, gy] = paths[0].at(-1);
   return finalizeMaze({ width, height, open }, { x: sx, y: sy }, { x: gx, y: gy });
