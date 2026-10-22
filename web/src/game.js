@@ -1344,7 +1344,11 @@ function updateMonster(dt) {
       : `Monstret sover. Spring! (vaknar om ${Math.max(1, Math.ceil(m.sleep))} s)`;
     updateHideButton();
     if (m.sleep <= 0) {
-      m.mode = 'chase';
+      // Är du fortfarande gömd vet monstret inte var du är: det börjar leta i stället för att jaga.
+      m.mode = S.hidden ? 'lost' : 'chase';
+      m.lostTimer = { easy: 10, medium: 8, hard: 6 }[settings.difficulty] ?? 8;
+      m.pause = 0;
+      m.peeking = false;
       m.cell = { ...maze.start };
       m.next = null;
       m.tmap = null;
