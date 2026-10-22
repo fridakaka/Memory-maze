@@ -59,14 +59,14 @@ sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
 const mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-const playCam = new THREE.PerspectiveCamera(50, 1, 0.1, 60);
-const rearCam = new THREE.PerspectiveCamera(62, 1.4, 0.1, 60);
+const playCam = new THREE.PerspectiveCamera(50, 1, 0.3, 40);
+const rearCam = new THREE.PerspectiveCamera(62, 1.4, 0.3, 40);
 let camera = mapCam;
 
 const mats = {
   floor: new THREE.MeshLambertMaterial(),
   wallSide: new THREE.MeshLambertMaterial(),
-  wallTop: new THREE.MeshLambertMaterial(),
+  wallTop: new THREE.MeshLambertMaterial({ polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
   path: new THREE.MeshLambertMaterial({ color: 0xff4f8b, emissive: 0x7a1038 }),
   start: new THREE.MeshLambertMaterial({ color: 0x5aa9e6, emissive: 0x143a5c }),
   goal: new THREE.MeshLambertMaterial({ color: 0xffd25a, emissive: 0x9a6a00 }),
@@ -171,8 +171,12 @@ function ghostMaterial(base) {
 /** Räknar ut en väggs matris i `dummy`. */
 function computeWallMatrix(i, scaleY = 1) {
   const w = walls[i];
-  dummy.position.set(w.cx, (WALL_H * scaleY) / 2, w.cz);
-  dummy.scale.set(w.sx, WALL_H * scaleY, w.sz);
+  // Väggar överlappar i hörnen. Ovansidorna får olika höjd (några centimeter) så att de
+  // inte ritas på exakt samma plats och flimrar. Telefoner har ofta sämre djupprecision.
+  const lift = w.sx === w.sz ? 0.03 : w.sx > w.sz ? 0 : 0.015;
+  const height = WALL_H * scaleY + lift;
+  dummy.position.set(w.cx, height / 2, w.cz);
+  dummy.scale.set(w.sx, height, w.sz);
   dummy.updateMatrix();
 }
 

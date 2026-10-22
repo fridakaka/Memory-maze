@@ -15,7 +15,7 @@ function canvasTex(size, draw, { repeat = 1, clamp = false } = {}) {
   t.colorSpace = THREE.SRGBColorSpace;
   if (!clamp) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   return t;
 }
 
@@ -416,7 +416,7 @@ const spaceWall = (glow) => (ctx, n) => {
     ctx.fillStyle = color;
     ctx.fillRect(0, y, 512, h);
   };
-  if (glow) { strip(14, 8, '#35e6ff'); strip(262, 4, '#2a9fd0'); }
+  if (glow) { strip(12, 12, '#35e6ff'); strip(260, 8, '#2a9fd0'); }
   else { strip(10, 16, '#1b2230'); strip(258, 12, '#1b2230'); }
 
   // Rundt fönster mot rymden: stjärnor och en planet
