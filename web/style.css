@@ -308,3 +308,10 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
   70% { opacity: 1; transform: translateY(-30px) scale(1); }
   100% { opacity: 0; transform: translateY(-60px) scale(1); }
 }
+
+.chk { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; padding: 8px 4px; }
+.chk input { width: 24px; height: 24px; accent-color: var(--accent); }
+
+textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; border-radius: 14px; border: 2px solid var(--soft); background: #fff; color: var(--ink); resize: vertical; margin: 6px 0 12px; user-select: text; -webkit-user-select: text; }
+.menu-foot { display: flex; justify-content: space-between; align-items: center; font-size: 13px; opacity: .85; margin: 2px 4px 8px; }
+.linkish { background: none; box-shadow: none; padding: 6px 10px; font-size: 14px; font-weight: 800; color: var(--accent); }

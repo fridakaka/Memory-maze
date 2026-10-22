@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Maze Memory</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#3f7d3a">
+  <meta name="apple-mobile-web-app-title" content="Maze Memory">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -94,6 +98,7 @@
 
     <div class="menu-bottom">
       <div id="lvl-info" class="info"></div>
+      <div class="menu-foot"><span id="version"></span><button id="feedback-btn" class="linkish">💬 Tyck till</button></div>
       <button id="play" class="primary">Spela</button>
     </div>
   </div>
@@ -108,6 +113,10 @@
       <button data-v="memory" class="on">Memory<small>Vägen är markerad</small></button>
     </div>
     <p class="note">Memory: den rosa linjen visar rätt väg medan du studerar kartan. Navigator: ingen linje, du hittar vägen själv med blicken och memorerar den. Det är svårare.</p>
+
+    <h2>Ljud</h2>
+    <label class="chk"><input id="snd-sfx" type="checkbox" checked> Ljudeffekter</label>
+    <label class="chk"><input id="snd-music" type="checkbox" checked> Musik</label>
 
     <h2>Tempo</h2>
     <div class="seg" id="seg-diff">
@@ -142,7 +151,17 @@
       <button id="reset-save">Nollställ sparad progress</button>
     </details>
 
+    <button id="feedback-btn2">💬 Skicka feedback</button>
     <button id="settings-close" class="primary">Klar</button>
+  </div>
+
+  <!-- Feedback -->
+  <div id="sheet-feedback" class="panel sheet hidden">
+    <h1>Tyck till!</h1>
+    <p class="note">Vad var roligt? Vad var svårt eller konstigt? Ju mer detaljer, desto bättre. Information om din telefon och dina senaste banor följer med automatiskt.</p>
+    <textarea id="fb-text" rows="6" placeholder="Skriv här…"></textarea>
+    <button id="fb-send" class="primary">Skicka</button>
+    <button id="fb-cancel">Avbryt</button>
   </div>
 
   <!-- Välj figur -->

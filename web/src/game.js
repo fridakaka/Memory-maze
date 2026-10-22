@@ -6,6 +6,8 @@ import {
   DIRS, DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
+import { createAudio } from './audio.js';
+import { VERSION, FEEDBACK_URL } from './config.js';
 import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, clockIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
@@ -30,6 +32,17 @@ const save = Object.assign({ stars: {}, lives: 5, peeks: 0, peekUnlocked: false,
 const PEEK_HARD_TO_UNLOCK = 3;
 const PEEK_FREE = 5;
 const PEEK_EVERY = 3;
+
+// ---------- Ljud ----------
+const audio = createAudio();
+audio.setEnabled({ sfx: save.sfx !== false, music: save.music !== false });
+audio.setMusic('menu');
+// Webbläsare tillåter ljud först efter en tryckning
+for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, () => audio.unlock(), { capture: true });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b && !b.matches('#controls button[data-rel]')) audio.play('tap');
+});
 
 // ---------- Inställningar ----------
 const settings = { mode: 'memory', difficulty: 'medium', level: 1 };
@@ -872,6 +885,7 @@ function startLevel(leg = 0, carry = null) {
   S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0; S.mapPitch = 1.05;
   fitMapCamera();
   S.phase = 'study';
+  audio.setMusic('study');
 
   show($('menu'), false);
   show($('result'), false);
@@ -906,6 +920,8 @@ function startLevel(leg = 0, carry = null) {
 
 function beginPlay() {
   S.phase = 'play';
+  audio.play('start');
+  audio.setMusic('play');
   pathGroup.visible = false;
   mapIcons.visible = false;
   scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
@@ -968,6 +984,7 @@ function showDialog({ title, text, primary = 'Okej', secondary = null, onPrimary
   show($('dialog-secondary'), !!secondary);
   if (secondary) $('dialog-secondary').textContent = secondary;
   dialogHandlers = { onPrimary, onSecondary };
+  audio.play('dialog');
   // Rutan flyttas ned om den markerade delen (kompass, backspegel) sitter uppe och annars skulle ligga över texten.
   $('dialog').classList.toggle('low', hi === 'rear' || hi === 'compass');
   S.paused = true;
@@ -1041,6 +1058,7 @@ function checkpoint() {
   const next = S.exp.leg + 1;
   const carry = { limit: S.limit, timeLeft: S.timeLeft, elapsed: S.elapsed, wrongTurns: S.wrongTurns };
   react('win');
+  audio.play('checkpoint');
   for (const id of ['controls', 'compass', 'danger', 'rear', 'leave', 'hint']) show($(id), false);
   showDialog({
     title: 'Checkpoint!',
@@ -1106,6 +1124,7 @@ function collectClocks() {
       S.limit += S.clockBonus;
       S.clocksGot++;
       showPop(`+${S.clockBonus} s ⏰`);
+      audio.play('clock');
       if (navigator.vibrate) navigator.vibrate(30);
     }
   }
@@ -1141,6 +1160,7 @@ function openPeek() {
   }
   save.peeks--;
   writeSave();
+  audio.play('peek');
   S.peek = true;
   // Väggar som är genomskinliga just nu görs solida igen så att kartan blir hel.
   for (const id of cut.keys()) setWallMatrix(id, 1);
@@ -1199,6 +1219,7 @@ function hide() {
   if (S.phase !== 'play' || S.run || S.hidden || !spot || S.paused) return;
   if (S.mon?.awake && S.mon.mode === 'chase' && S.mon.dist <= SEEN_DIST) return;
   spot.used = true;
+  audio.play('hide');
   for (const m of spot.mesh.userData.mats) m.color.set(0x8a8f8c);
   S.hidden = true;
   hero.visible = false;
@@ -1216,6 +1237,7 @@ function hide() {
 
 function unhide() {
   if (!S.hidden) return;
+  audio.play('unhide');
   S.hidden = false;
   hero.visible = true;
   refreshControls();
@@ -1230,6 +1252,8 @@ function choose(rel) {
   const corridor = walkCorridor(maze, S.node, dir);
   const pts = [cellPos(S.node.x, S.node.y), ...corridor.cells.map((c) => cellPos(c.x, c.y))];
   S.run = { pts, seg: 0, t: 0, to: corridor.to, heading: corridor.heading, wrong: corridor.wrong, dir };
+  S.stepT = 0;
+  audio.play('go');
   S.yaw = YAW[dir];
   // Vid en vändning vrider sig kameran snabbt men mjukt i stället för att svepa långsamt.
   if (rel === 'back' || Math.abs(angleDiff(S.camYaw, S.yaw)) > 2.2) S.uturn = true;
@@ -1239,6 +1263,8 @@ function choose(rel) {
 
 function stepRun(dt) {
   const run = S.run;
+  S.stepT = (S.stepT ?? 0) + dt;
+  if (S.stepT >= 0.19) { S.stepT = 0; audio.play('step'); }
   let move = RUN_SPEED * dt;
   while (move > 0 && run.seg < run.pts.length - 1) {
     const a = run.pts[run.seg];
@@ -1262,7 +1288,7 @@ function stepRun(dt) {
   }
   if (run.seg >= run.pts.length - 1) {
     hero.position.copy(run.pts[run.pts.length - 1]);
-    if (run.wrong) { S.wrongTurns++; }
+    if (run.wrong) { S.wrongTurns++; audio.play('oops'); }
     S.node = { ...run.to };
     S.heading = run.heading;
     S.yaw = YAW[S.heading];
@@ -1321,6 +1347,7 @@ function updateMonster(dt) {
     monster.position.copy(cellPos(m.cell.x, m.cell.y));
     show($('danger'));
     S.shakeBurst = 0.7; // ett kort skak när monstret vaknar
+    audio.play('roar');
     navigator.vibrate?.(80);
     coach('monsterWake');
     if (S.hidden) { m.mode = 'lost'; m.lostTimer = 8; }
@@ -1355,6 +1382,7 @@ function updateMonster(dt) {
       monster.visible = true;
       monster.position.copy(cellPos(m.cell.x, m.cell.y));
       S.shakeBurst = 0.7;
+      audio.play('roar');
       navigator.vibrate?.(80);
     }
     S.shake += (0 - S.shake) * Math.min(1, dt * 4);
@@ -1434,6 +1462,8 @@ function updateMonster(dt) {
   // Förvarning: kameran darrar och skärmen pulserar allt mer ju närmare monstret kommer.
   const close = !S.hidden && !lost && !retreat ? Math.max(0, Math.min(1, (8 - m.dist) / 8)) : 0;
   m.close = close;
+  audio.heartbeat(S.hidden ? 0 : close);
+  audio.setMusic(m.mode === 'chase' && !S.hidden ? 'tense' : 'play');
   S.shake += ((close * close * 0.07) - S.shake) * Math.min(1, dt * 4);
   if (close > 0.6 && S.vibrateIn <= 0) {
     navigator.vibrate?.(30);
@@ -1640,6 +1670,10 @@ function awardClear(level) {
 function finish(win, reason = 'time') {
   closePeek();
   S.phase = 'ended';
+  audio.setMusic(null);
+  audio.heartbeat(0);
+  audio.play(win ? 'win' : 'lose');
+  setTimeout(() => { if (S.phase === 'ended') audio.setMusic('menu'); }, 2500);
   react(win ? 'win' : 'lose');
   show($('controls'), false);
   show($('compass'), false);
@@ -1652,6 +1686,11 @@ function finish(win, reason = 'time') {
   const used = S.elapsed;
   const key = `${S.modeNow}:${settings.difficulty}:${settings.level}`;
 
+  // Enkel logg som följer med feedbacken
+  save.log = [...(save.log ?? []), {
+    l: settings.level, m: S.modeNow, d: settings.difficulty, w: win ? 1 : 0, t: Math.round(used), x: S.wrongTurns,
+    r: win ? '' : reason, c: S.clocksGot || 0,
+  }].slice(-40);
   let stars = 0;
   let award = { text: '', unlocked: false };
   if (win) {
@@ -1832,6 +1871,11 @@ function frame(now) {
     updateHud();
   }
 
+  if (!S.mon || S.phase !== 'play') audio.heartbeat(0);
+  if (S.phase === 'play' && S.kind === 'time' && !S.paused && S.timeLeft < 10 && S.timeLeft > 0) {
+    const sec = Math.ceil(S.timeLeft);
+    if (sec !== S.tickSec) { S.tickSec = sec; audio.play('tick'); }
+  }
   animateMonster(dt);
   animateClocks(dt);
   if (S.peek) {
@@ -2057,6 +2101,10 @@ $('hero-close').onclick = () => show($('sheet-hero'), false);
 $('settings-btn').onclick = () => show($('sheet-settings'));
 $('settings-close').onclick = () => { show($('sheet-settings'), false); refreshMenu(); };
 
+$('snd-sfx').checked = save.sfx !== false;
+$('snd-music').checked = save.music !== false;
+$('snd-sfx').onchange = () => { save.sfx = $('snd-sfx').checked; writeSave(); audio.setEnabled({ sfx: save.sfx }); };
+$('snd-music').onchange = () => { save.music = $('snd-music').checked; writeSave(); audio.setEnabled({ music: save.music }); };
 $('dbg-peeks').checked = !!save.peekUnlocked;
 $('dbg-peeks').onchange = () => {
   save.peekUnlocked = $('dbg-peeks').checked;
@@ -2087,6 +2135,8 @@ $('res-next').onclick = () => {
   startLevel();
 };
 function backToMenu() {
+  audio.setMusic('menu');
+  audio.heartbeat(0);
   S.peek = false;
   show($('peek-close'), false);
   S.phase = 'menu';
@@ -2107,6 +2157,49 @@ function backToMenu() {
   show($('rear'), false);
 }
 $('res-menu').onclick = backToMenu;
+
+// ---------- Feedback ----------
+function feedbackReport(text) {
+  const log = (save.log ?? []).slice(-15).map((e) =>
+    `  bana ${e.l}: ${e.w ? 'klarad' : `förlorad${e.r ? ` (${e.r})` : ''}`}, ${e.t} s, ${e.x} felval${e.c ? `, ${e.c} klockor` : ''}, ${e.m}/${e.d}`).join('\n');
+  return [
+    text.trim() || '(ingen text)',
+    '',
+    `--- Information om testet ---`,
+    `Maze Memory ${VERSION}`,
+    `Skärm: ${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x`,
+    `Enhet: ${navigator.userAgent}`,
+    `Läge: ${settings.mode}, tempo: ${settings.difficulty}, nuvarande bana: ${settings.level}`,
+    `Stjärnor: ${totalStars()}, kikar: ${save.peeks ?? 0}`,
+    `Senaste banorna:`,
+    log || '  (inga än)',
+  ].join('\n');
+}
+function openFeedback() {
+  show($('sheet-settings'), false);
+  $('fb-text').value = '';
+  show($('sheet-feedback'));
+}
+async function sendFeedback() {
+  const report = feedbackReport($('fb-text').value);
+  show($('sheet-feedback'), false);
+  if (FEEDBACK_URL) {
+    try { await navigator.clipboard.writeText(report); } catch { /* ingen urklippsrätt */ }
+    window.open(FEEDBACK_URL, '_blank');
+    showDialog({ title: 'Tack!', text: 'Din feedback är kopierad. Klistra in den i formuläret som öppnades.', primary: 'Okej' });
+    return;
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Feedback på Maze Memory', text: report }); return; } catch { /* avbröts */ }
+  }
+  try { await navigator.clipboard.writeText(report); } catch { /* ingen urklippsrätt */ }
+  showDialog({ title: 'Kopierat', text: 'Din feedback är kopierad. Klistra in den i ett meddelande till den som skickade spelet till dig.', primary: 'Okej' });
+}
+$('feedback-btn').onclick = openFeedback;
+$('feedback-btn2').onclick = openFeedback;
+$('fb-send').onclick = sendFeedback;
+$('fb-cancel').onclick = () => show($('sheet-feedback'), false);
+$('version').textContent = `Testversion ${VERSION}`;
 
 /** Att lämna en bana mitt under spelet kostar ett liv (utom i introduktionen). */
 $('leave').onclick = () => {
@@ -2220,7 +2313,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
