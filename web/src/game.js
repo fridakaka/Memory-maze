@@ -28,7 +28,7 @@ function writeSave() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* privat läge */ }
 }
 const save = Object.assign({ stars: {}, lives: 5 }, loadSave());
-// Kikar: tre per bana (inte i introduktionen). En extra kik för den som tar alla klockor.
+// Kikar: tre per bana, även i introduktionen. En extra kik för den som tar alla klockor.
 const PEEKS_PER_LEVEL = 3;
 
 // ---------- Ljud ----------
@@ -831,7 +831,7 @@ function startLevel(leg = 0, carry = null) {
   } else {
     S.limit = L.intro ? L.plan.timeLimit : timeLimit(maze, L.d, settings.difficulty, dbgTime);
   }
-  S.peeksLeft = S.intro ? 0 : (carry?.peeksLeft ?? PEEKS_PER_LEVEL);
+  S.peeksLeft = carry?.peeksLeft ?? PEEKS_PER_LEVEL;
   S.clocksGot = 0;
   S.clockTotal = maze.clocks?.length ?? 0;
   if (S.clockTotal) {
@@ -1095,7 +1095,7 @@ function refreshControls() {
 }
 
 // ---------- Kikar: titta på kartan medan tiden går ----------
-const peeksOn = () => !S.intro && S.phase === 'play';
+const peeksOn = () => S.phase === 'play';
 function updatePeekBadge() {
   const badge = $('peek-count');
   show(badge, peeksOn());

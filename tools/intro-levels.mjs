@@ -29,6 +29,7 @@ export const INTRO_LEVELS = [
       { when: 'play', text: 'Figuren springer själv längs gångarna. När den stannar väljer du väg med pilarna: ← vänster, ↑ rakt fram och → höger, sett från figuren. I övningen blinkar rätt pil, så välj den. I vanliga banor blinkar ingen pil, då väljer du själv.', hi: 'controls' },
       { when: 'play', text: 'Den gröna stapeln är tiden som är kvar. Tar den slut förlorar du ett liv, men inte i övningen.', hi: 'bar' },
       { when: 'compass', text: 'Kompassen visar var norr är när du står still. Kartan har alltid norr uppåt, så kompassen hjälper dig att koppla ihop kartan med det du ser.', hi: 'compass' },
+      { when: 'compass', text: 'Du kan också trycka på kompassen för att kika på kartan och se var du är. Du har tre kikar på varje bana. Tiden går medan du tittar, så kika bara när du är osäker.', hi: 'compass' },
       { when: 'deadend', text: 'Återvändsgränd! Ibland väljer man fel väg. Det är inte farligt, det kostar bara tid. Tryck på "Vänd" så springer figuren tillbaka till korsningen.', hi: 'back' },
     ],
     guides: [
