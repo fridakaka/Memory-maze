@@ -110,10 +110,10 @@ export function createSynth(ctx, out) {
 
 // Musik: korta mönster som slumpas fram i en skala, så att den aldrig upprepar sig exakt.
 const MOODS = {
-  menu: { bpm: 72, scale: [0, 2, 4, 7, 9], pad: [0, 7], density: 0.55, bass: false, type: 'sine', vol: 0.07, base: 0 },
-  study: { bpm: 84, scale: [0, 2, 4, 7, 9], pad: [0, 4, 7], density: 0.6, bass: false, type: 'triangle', vol: 0.06, base: 0 },
-  play: { bpm: 112, scale: [0, 2, 4, 7, 9], pad: [0, 7], density: 0.75, bass: true, type: 'triangle', vol: 0.06, base: 0 },
-  tense: { bpm: 138, scale: [0, 3, 5, 7, 10], pad: [-12, -5], density: 0.5, bass: true, type: 'triangle', vol: 0.05, base: -3 },
+  menu: { bpm: 72, scale: [0, 2, 4, 7, 9], pad: [0, 7], density: 0.55, bass: false, type: 'sine', vol: 0.2, base: 0 },
+  study: { bpm: 84, scale: [0, 2, 4, 7, 9], pad: [0, 4, 7], density: 0.6, bass: false, type: 'triangle', vol: 0.2, base: 0 },
+  play: { bpm: 112, scale: [0, 2, 4, 7, 9], pad: [0, 7], density: 0.75, bass: true, type: 'triangle', vol: 0.2, base: 0 },
+  tense: { bpm: 138, scale: [0, 3, 5, 7, 10], pad: [-12, -5], density: 0.5, bass: true, type: 'triangle', vol: 0.2, base: -3 },
 };
 
 export function createAudio() {
@@ -122,6 +122,7 @@ export function createAudio() {
   let sfxBus = null;
   let musicBus = null;
   let sounds = null;
+  let analyser = null;
   const enabled = { sfx: true, music: true };
   let wantMood = null;
   let mood = null;
@@ -148,8 +149,23 @@ export function createAudio() {
       sfxBus.gain.value = enabled.sfx ? 1.5 : 0;
       sfxBus.connect(master);
       musicBus = ctx.createGain();
-      musicBus.gain.value = enabled.music ? 0.8 : 0;
+      musicBus.gain.value = enabled.music ? 1 : 0;
       musicBus.connect(master);
+      // Ett litet eko gör musiken mjukare och fylligare
+      const echo = ctx.createDelay(1);
+      echo.delayTime.value = 0.3;
+      const fb = ctx.createGain();
+      fb.gain.value = 0.35;
+      const wet = ctx.createGain();
+      wet.gain.value = 0.35;
+      musicBus.connect(echo);
+      echo.connect(fb);
+      fb.connect(echo);
+      echo.connect(wet);
+      wet.connect(master);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      master.connect(analyser);
       sounds = createSynth(ctx, sfxBus);
       timer = setInterval(tick, 40);
     }
@@ -185,7 +201,7 @@ export function createAudio() {
     if (!ctx) return;
     const t = ctx.currentTime;
     sfxBus.gain.setTargetAtTime(enabled.sfx ? 1.5 : 0, t, 0.05);
-    musicBus.gain.setTargetAtTime(enabled.music ? 0.8 : 0, t, 0.2);
+    musicBus.gain.setTargetAtTime(enabled.music ? 1 : 0, t, 0.2);
   }
 
   // Schemaläggare: lägger ut noter en liten stund i förväg
@@ -213,7 +229,7 @@ export function createAudio() {
     const synth = (opts) => musicTone(t, opts);
     // Ackord i början av varannan takt
     if (pos === 0 && bar % 2 === 0) {
-      for (const n of m.pad) synth({ f: note(n + m.base - 12), dur: eighth * 14, vol: m.vol * 0.7, type: 'sine', attack: 0.4 });
+      for (const n of m.pad) synth({ f: note(n + m.base - 12), dur: eighth * 14, vol: m.vol * 0.5, type: 'sine', attack: 0.4 });
     }
     // Bas på takten
     if (m.bass && pos % 4 === 0) synth({ f: note(m.base - 24 + (bar % 4 === 3 ? 5 : 0)), dur: eighth * 3, vol: m.vol * 1.1, type: 'sine', attack: 0.01 });
@@ -245,5 +261,15 @@ export function createAudio() {
     else ctx.resume?.();
   });
 
-  return { unlock, play, setMusic, heartbeat, setEnabled, get running() { return ready(); } };
+  /** Aktuell ljudnivå (för felsökning och test). */
+  function level() {
+    if (!analyser) return 0;
+    const d = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(d);
+    let sum = 0;
+    for (const v of d) sum += v * v;
+    return Math.sqrt(sum / d.length);
+  }
+
+  return { unlock, play, setMusic, heartbeat, setEnabled, level, get running() { return ready(); } };
 }
