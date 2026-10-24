@@ -27,7 +27,7 @@ function loadSave() {
 function writeSave() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* privat läge */ }
 }
-const save = Object.assign({ stars: {}, lives: 5 }, loadSave());
+const save = Object.assign({ stars: {}, skips: 3, chap: {}, skipped: {}, fails: {} }, loadSave());
 // Kikar: tre per bana, även i introduktionen. En extra kik för den som tar alla klockor.
 const PEEKS_PER_LEVEL = 3;
 
@@ -44,7 +44,10 @@ document.addEventListener('click', (e) => {
 
 // ---------- Inställningar ----------
 const settings = { mode: 'memory', difficulty: 'medium', level: 1 };
-const MAX_LIVES = 5;
+// Kapitel: fem banor i taget. Tre liv per kapitel; är de slut börjar kapitlet om (stjärnor behålls).
+const CHAPTER_SIZE = 5;
+const CHAPTER_LIVES = 3;
+const FREE_SKIPS = 3; // gratis hopp över banor från början
 
 // ---------- three.js ----------
 const canvas = $('scene');
@@ -943,7 +946,8 @@ function beginPlay() {
 function updateHud() {
   const hudLevel = S.clockTotal ? `${S.hudBase} · ⏰ ${S.clocksGot}/${S.clockTotal}` : S.hudBase;
   if (hudLevel !== undefined && $('hud-level').textContent !== hudLevel) $('hud-level').textContent = hudLevel;
-  $('hud-lives').textContent = '❤'.repeat(save.lives) + '♡'.repeat(MAX_LIVES - save.lives);
+  const livesStr = livesText(settings.level);
+  if ($('hud-lives').textContent !== livesStr) $('hud-lives').textContent = livesStr;
   $('hud-wrong').textContent = `✗ ${S.wrongTurns}`;
   let frac;
   if (S.phase === 'study') frac = S.studyLeft / S.studyTotal;
@@ -1673,9 +1677,18 @@ function finish(win, reason = 'time') {
     stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
-  } else if (!S.intro) {
-    save.lives = Math.max(0, save.lives - 1);
   }
+  let chapterMsg = '';
+  let lost = null;
+  if (win) {
+    const r = registerClear(settings.level);
+    if (r === 'chapter') chapterMsg = ` · Kapitel ${chapterOf(settings.level) + 1} klart! 🎉`;
+  } else if (!S.intro && !isSide(settings.level)) {
+    save.fails = save.fails ?? {};
+    save.fails[settings.level] = (save.fails[settings.level] ?? 0) + 1;
+    lost = loseLife(settings.level);
+  }
+  S.afterFail = lost?.restarted ? lost.from : null;
   writeSave();
   updateHud();
 
@@ -1684,11 +1697,17 @@ function finish(win, reason = 'time') {
     $('res-stars').innerHTML = [0, 1, 2]
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
-      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : ''}`
+      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${chapterMsg || (firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : '')}`
       : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
-        : save.lives > 0 ? `Du har ${save.lives} liv kvar.` : 'Slut på liv. Du får fem nya.';
-    if (!win && !S.intro && save.lives === 0) { save.lives = MAX_LIVES; writeSave(); }
+        : lost?.restarted ? `Slut på liv! Kapitel ${lost.c + 1} börjar om från bana ${lost.from}. Dina stjärnor och klarade banor ligger kvar.`
+          : lost ? `Du har ${lost.lives} liv kvar i kapitlet.`
+            : 'Försök igen. Det kostar inget liv här.';
     show($('res-next'), win);
+    // Efter några misslyckanden kan man hoppa över banan
+    const canSkip = !win && !S.intro && !isSide(settings.level) && !cleared(settings.level)
+      && (save.fails?.[settings.level] ?? 0) >= 2 && !lost?.restarted;
+    show($('res-skip'), canSkip);
+    $('res-skip').textContent = `Hoppa över banan (${save.skips} kvar)`;
     show($('result'));
   }, win ? 1400 : 1200);
 }
@@ -1910,40 +1929,120 @@ const mainPath = () => levelOrder().filter((id) => !isSide(id));
 const sideAfter = (id) => { const p = levelInfo(id); return p.expedition?.after ?? p.clock?.after ?? null; };
 
 function cleared(id) {
-  return isIntro(id) ? !!save.intro?.[id] || bestStars(id) > 0 : bestStars(id) > 0;
+  if (isIntro(id)) return !!save.intro?.[id] || bestStars(id) > 0;
+  return bestStars(id) > 0 || !!save.skipped?.[id];
+}
+
+// Kapitlen: normala banor 1–100 i grupper om fem. Expeditioner, klockbanor och introduktion hör inte till något.
+const chapterOf = (id) => (isIntro(id) || isSide(id) ? null : Math.floor((id - 1) / CHAPTER_SIZE));
+const chapterCount = () => Math.ceil(levelCount() / CHAPTER_SIZE);
+function chapterLevels(c) {
+  const out = [];
+  for (let k = 0; k < CHAPTER_SIZE; k++) if (c * CHAPTER_SIZE + k + 1 <= levelCount()) out.push(c * CHAPTER_SIZE + k + 1);
+  return out;
+}
+
+/** Kapitlets tillstånd: run = hur många banor i rad som är klarade i den här omgången. */
+function chapter(c) {
+  save.chap = save.chap ?? {};
+  if (!save.chap[c]) {
+    // Äldre sparfiler: räkna ut från banor som redan är klarade
+    const ids = chapterLevels(c);
+    let run = 0;
+    while (run < ids.length && cleared(ids[run])) run++;
+    save.chap[c] = { run, done: run === ids.length, lives: CHAPTER_LIVES };
+  }
+  return save.chap[c];
 }
 
 /** Expeditioner och klockbanor är frivilliga och öppnas av banan de ligger efter. De stoppar inte huvudspåret. */
 function unlocked(id) {
   if (save.openLevels || cleared(id)) return true;
   if (isSide(id)) { const after = sideAfter(id); return after === null || cleared(after); }
-  const main = mainPath();
-  const i = main.indexOf(id);
-  if (i <= 0) return true;
-  // Upplåst om föregående är klarad (eller en senare, för äldre sparfiler)
-  return cleared(main[i - 1]) || main.slice(i).some(cleared);
+  if (isIntro(id)) {
+    const intros = introIds();
+    const i = intros.indexOf(id);
+    return i <= 0 || cleared(intros[i - 1]);
+  }
+  const c = chapterOf(id);
+  const open = c === 0 ? introIds().every(cleared) : chapter(c - 1).done;
+  if (!open) return false;
+  const st = chapter(c);
+  return st.done || id - chapterLevels(c)[0] <= st.run;
 }
 
 /** Första banan på huvudspåret som inte är klarad. */
 function frontier() {
-  const main = mainPath();
-  return main.find((id) => !cleared(id)) ?? main[main.length - 1];
+  const intro = introIds().find((i) => !cleared(i));
+  if (intro !== undefined) return intro;
+  for (let c = 0; c < chapterCount(); c++) {
+    const st = chapter(c);
+    if (!st.done) return chapterLevels(c)[Math.min(st.run, chapterLevels(c).length - 1)];
+  }
+  return levelCount();
 }
 
 /** Vad som behövs för att öppna en bana, som text. */
 function lockReason(id) {
   const label = (x) => (isIntro(x) ? `introduktion ${introIds().indexOf(x) + 1}` : `bana ${x}`);
   if (isSide(id)) return `Klara ${label(sideAfter(id))} för att öppna den här.`;
-  const main = mainPath();
-  return `Klara ${label(main[main.indexOf(id) - 1])} först.`;
+  if (isIntro(id)) return `Klara ${label(introIds()[introIds().indexOf(id) - 1])} först.`;
+  const c = chapterOf(id);
+  const open = c === 0 ? introIds().every(cleared) : chapter(c - 1).done;
+  if (!open) return c === 0 ? 'Klara introduktionen först.' : `Klara kapitel ${c} först.`;
+  return `Klara ${label(frontier())} först.`;
+}
+
+/** Vilket kapitel och vilka liv som gäller för en bana i spelet just nu. Null om banan inte kostar liv. */
+function lifeInfoFor(id) {
+  const c = chapterOf(id);
+  if (c === null) return null;
+  const st = chapter(c);
+  if (st.done || id - chapterLevels(c)[0] !== st.run) return null;
+  return { c, st };
+}
+
+/** Förlorar ett liv i kapitlet. Är de slut börjar kapitlet om. */
+function loseLife(id) {
+  const info = lifeInfoFor(id);
+  if (!info) return null;
+  info.st.lives--;
+  if (info.st.lives <= 0) {
+    info.st.run = 0;
+    info.st.lives = CHAPTER_LIVES;
+    return { restarted: true, c: info.c, from: chapterLevels(info.c)[0] };
+  }
+  return { restarted: false, lives: info.st.lives };
+}
+
+/** En bana är klarad (eller överhoppad): ta kapitlet ett steg framåt. */
+function registerClear(id) {
+  const c = chapterOf(id);
+  if (c === null) return null;
+  const st = chapter(c);
+  const ids = chapterLevels(c);
+  if (st.done || id - ids[0] !== st.run) return null;
+  st.run++;
+  if (st.run >= ids.length) { st.done = true; st.lives = CHAPTER_LIVES; return 'chapter'; }
+  return 'run';
+}
+
+function livesText(id) {
+  if (isIntro(id)) return '🎓 övning';
+  if (isSide(id)) return '⭐ bonusbana';
+  const info = lifeInfoFor(id);
+  if (!info) return '🔁 övning';
+  return '❤'.repeat(info.st.lives) + '♡'.repeat(CHAPTER_LIVES - info.st.lives);
 }
 
 /** Banan som ska spelas efter att man klarat den nuvarande. */
 function nextAfter(id) {
-  const main = mainPath();
-  const i = main.indexOf(id);
-  const next = i >= 0 ? main[i + 1] : frontier();
-  return next && unlocked(next) ? next : id;
+  let next;
+  if (isIntro(id)) next = introIds()[introIds().indexOf(id) + 1] ?? 1;
+  else if (isSide(id)) next = frontier();
+  else next = id + 1;
+  if (next > levelCount() && !isIntro(next) && !isSide(next)) next = id;
+  return unlocked(next) ? next : frontier();
 }
 
 /** Typ och namn på en bana, till kartan. Betyget från banans analys används om det finns. */
@@ -2029,6 +2128,11 @@ function renderMap(scroll = false) {
     const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
     const locked = !unlocked(id);
+    const chNo = chapterOf(id);
+    if (chNo !== null && (id - 1) % CHAPTER_SIZE === 0) {
+      const st = chapter(chNo);
+      html += `<div class="chap-tag${st.done ? ' done' : ''}" style="top:${pos[k].y - 78}px">Kapitel ${chNo + 1}${st.done ? ' ✓' : ''}</div>`;
+    }
     html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
@@ -2049,7 +2153,10 @@ function renderMap(scroll = false) {
 function refreshMenu(scroll = false) {
   if (!unlocked(settings.level)) settings.level = frontier();
   $('stat-stars').textContent = `★ ${totalStars()}`;
-  $('stat-lives').textContent = `❤ ${save.lives}`;
+  const lifeLevel = settings.level;
+  const info = lifeInfoFor(lifeLevel);
+  $('stat-lives').textContent = chapterOf(lifeLevel) === null ? '❤ –' : `❤ ${info ? info.st.lives : CHAPTER_LIVES}`;
+  $('stat-skips').textContent = `⏭ ${save.skips}`;
   $('hero-emoji').textContent = heroEmoji();
   const t = levelType(settings.level);
   const th = themeFor(settings.level, t.p.themeId);
@@ -2066,7 +2173,8 @@ function refreshMenu(scroll = false) {
     $('lvl-info').textContent = `${t.p.expedition.title} · ${t.p.expedition.legs} delar med checkpoints · ${th.name} · ${t.p.width}×${t.p.height} rutor per del`;
     $('play').textContent = `Spela ${t.p.expedition.title.toLowerCase()}`;
   } else {
-    $('lvl-info').textContent = `Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
+    const chNo = chapterOf(settings.level);
+    $('lvl-info').textContent = `${chNo === null ? '' : `Kapitel ${chNo + 1} · `}Bana ${settings.level} · ${th.name}${w.name ? ` · ${w.emoji} ${w.name}` : ''} · ${t.label} · ${t.p.width}×${t.p.height} rutor`;
     $('play').textContent = `Spela bana ${settings.level}`;
   }
   renderMap(scroll);
@@ -2137,7 +2245,47 @@ bindSeg('seg-diff', 'difficulty');
 
 $('play').onclick = () => startLevel();
 $('ready').onclick = beginPlay;
-$('res-again').onclick = () => startLevel();
+$('res-again').onclick = () => {
+  if (S.afterFail) settings.level = S.afterFail;
+  startLevel();
+};
+$('res-skip').onclick = () => skipLevel();
+
+/** Hoppa över en svår bana. Man får tre gratis från början, sedan kan fler köpas. */
+function skipLevel() {
+  const id = settings.level;
+  if (!(save.skips > 0)) {
+    showDialog({
+      title: 'Slut på hopp',
+      text: 'Du har inga hopp kvar. Du kan köpa fem hopp för 9 kr. (Testversion: ingenting debiteras.)',
+      primary: 'Avbryt',
+      secondary: 'Köp 5 för 9 kr',
+      onSecondary: () => { save.skips += 5; writeSave(); $('res-skip').textContent = `Hoppa över banan (${save.skips} kvar)`; },
+    });
+    return;
+  }
+  showDialog({
+    title: 'Hoppa över banan?',
+    text: `Banan räknas som klar utan stjärnor, och du kan spela den senare. Du har ${save.skips} hopp kvar.`,
+    primary: 'Hoppa över',
+    secondary: 'Avbryt',
+    onPrimary: () => {
+      save.skips--;
+      save.skipped = save.skipped ?? {};
+      save.skipped[id] = true;
+      const r = registerClear(id);
+      settings.level = nextAfter(id);
+      save.level = settings.level;
+      writeSave();
+      backToMenu();
+      showDialog({
+        title: r === 'chapter' ? 'Kapitlet är klart! 🎉' : 'Överhoppad',
+        text: 'Nästa bana är upplåst.',
+        primary: 'Okej',
+      });
+    },
+  });
+}
 $('res-next').onclick = () => {
   settings.level = nextAfter(settings.level);
   startLevel();
@@ -2217,22 +2365,24 @@ $('leave').onclick = () => {
   if (S.phase !== 'play' || dialogHandlers) return;
   showDialog({
     title: 'Lämna banan?',
-    text: S.intro ? 'Du kan försöka igen när du vill. Det kostar inget liv i introduktionen.' : 'Du förlorar ett liv om du lämnar nu.',
+    text: S.intro ? 'Du kan försöka igen när du vill. Det kostar inget liv i introduktionen.'
+      : lifeInfoFor(settings.level) ? 'Du förlorar ett liv i kapitlet om du lämnar nu.' : 'Det kostar inget liv att lämna den här banan.',
     primary: 'Lämna',
     secondary: 'Fortsätt',
     onPrimary: () => {
-      if (!S.intro) {
-        save.lives = Math.max(0, save.lives - 1);
-        if (save.lives === 0) save.lives = MAX_LIVES;
-        writeSave();
-      }
+      const lost = S.intro ? null : loseLife(settings.level);
+      writeSave();
+      if (lost?.restarted) { settings.level = lost.from; save.level = lost.from; writeSave(); }
       backToMenu();
+      if (lost?.restarted) {
+        showDialog({ title: 'Slut på liv!', text: `Kapitel ${lost.c + 1} börjar om från bana ${lost.from}. Dina stjärnor och klarade banor ligger kvar.`, primary: 'Okej' });
+      }
     },
   });
 };
 $('back-study').onclick = backToMenu;
 $('reset-save').onclick = () => {
-  save.stars = {}; save.lives = MAX_LIVES; save.level = null; save.intro = {}; settings.level = firstLevel(); writeSave(); refreshMenu(true);
+  save.stars = {}; save.chap = {}; save.skipped = {}; save.fails = {}; save.skips = FREE_SKIPS; save.level = null; save.intro = {}; settings.level = firstLevel(); writeSave(); refreshMenu(true);
 };
 
 for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
@@ -2324,7 +2474,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, chapter, skipLevel, finish, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
