@@ -27,11 +27,9 @@ function loadSave() {
 function writeSave() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* privat läge */ }
 }
-const save = Object.assign({ stars: {}, lives: 5, peeks: 0, peekUnlocked: false, hardClears: 0, earn: 0 }, loadSave());
-// Kikar: tre svåra banor låser upp dem (fem gratis), sedan ger var tredje nyklarad bana en ny.
-const PEEK_HARD_TO_UNLOCK = 3;
-const PEEK_FREE = 5;
-const PEEK_EVERY = 3;
+const save = Object.assign({ stars: {}, lives: 5 }, loadSave());
+// Kikar: tre per bana (inte i introduktionen). En extra kik för den som tar alla klockor.
+const PEEKS_PER_LEVEL = 3;
 
 // ---------- Ljud ----------
 const audio = createAudio();
@@ -833,6 +831,7 @@ function startLevel(leg = 0, carry = null) {
   } else {
     S.limit = L.intro ? L.plan.timeLimit : timeLimit(maze, L.d, settings.difficulty, dbgTime);
   }
+  S.peeksLeft = S.intro ? 0 : (carry?.peeksLeft ?? PEEKS_PER_LEVEL);
   S.clocksGot = 0;
   S.clockTotal = maze.clocks?.length ?? 0;
   if (S.clockTotal) {
@@ -1056,7 +1055,7 @@ function arriveAtNode(animate = true) {
 /** Framme vid en checkpoint i en expedition: nästa del av kartan visas. */
 function checkpoint() {
   const next = S.exp.leg + 1;
-  const carry = { limit: S.limit, timeLeft: S.timeLeft, elapsed: S.elapsed, wrongTurns: S.wrongTurns };
+  const carry = { limit: S.limit, timeLeft: S.timeLeft, elapsed: S.elapsed, wrongTurns: S.wrongTurns, peeksLeft: S.peeksLeft };
   react('win');
   audio.play('checkpoint');
   for (const id of ['controls', 'compass', 'danger', 'rear', 'leave', 'hint']) show($(id), false);
@@ -1096,11 +1095,11 @@ function refreshControls() {
 }
 
 // ---------- Kikar: titta på kartan medan tiden går ----------
-const peeksOn = () => save.peekUnlocked && !S.intro;
+const peeksOn = () => !S.intro && S.phase === 'play';
 function updatePeekBadge() {
   const badge = $('peek-count');
   show(badge, peeksOn());
-  badge.textContent = `👁 ${save.peeks}`;
+  badge.textContent = `👁 ${S.peeksLeft ?? 0}`;
 }
 
 function showPop(text) {
@@ -1125,6 +1124,10 @@ function collectClocks() {
       S.clocksGot++;
       showPop(`+${S.clockBonus} s ⏰`);
       audio.play('clock');
+      if (S.clocksGot === S.clockTotal) {
+        S.peeksLeft++;
+        setTimeout(() => showPop('Alla klockor! +1 kik 👁'), 1400);
+      }
       if (navigator.vibrate) navigator.vibrate(30);
     }
   }
@@ -1148,19 +1151,13 @@ function animateClocks(dt) {
 
 function openPeek() {
   if (S.phase !== 'play' || S.run || S.peek || S.paused || !peeksOn()) return;
-  if (save.peeks <= 0) {
-    showDialog({
-      title: 'Slut på kikar',
-      text: 'Du får en ny kik för var tredje bana du klarar för första gången. Du kan också köpa fem kikar för 9 kr. (Testversion: ingenting debiteras.)',
-      primary: 'Okej',
-      secondary: 'Köp 5 för 9 kr',
-      onSecondary: () => { save.peeks += PEEK_FREE; writeSave(); updatePeekBadge(); },
-    });
+  if (!(S.peeksLeft > 0)) {
+    showDialog({ title: 'Slut på kikar', text: 'Du har använt alla kikar på den här banan.', primary: 'Okej' });
     return;
   }
-  save.peeks--;
-  writeSave();
-  audio.play('peek');
+  S.peeksLeft--;
+  updatePeekBadge();
+  audio.play('peek');  audio.play('peek');
   S.peek = true;
   // Väggar som är genomskinliga just nu görs solida igen så att kartan blir hel.
   for (const id of cut.keys()) setWallMatrix(id, 1);
@@ -1645,28 +1642,6 @@ function updateCompass() {
 }
 
 // ---------- Slut ----------
-/** Räknar en nyklarad bana mot kikar. Returnerar text till resultatet och om kikar just låstes upp. */
-function awardClear(level) {
-  const key = levelType(level).key;
-  if (!save.peekUnlocked) {
-    if (key === 'hard' || key === 'expedition' || key === 'clock') save.hardClears = (save.hardClears || 0) + 1;
-    if (save.hardClears >= PEEK_HARD_TO_UNLOCK) {
-      save.peekUnlocked = true;
-      save.peeks = (save.peeks || 0) + PEEK_FREE;
-      save.earn = 0;
-      return { text: ` · +${PEEK_FREE} kikar 👁`, unlocked: true };
-    }
-    return { text: '', unlocked: false };
-  }
-  save.earn = (save.earn || 0) + 1;
-  if (save.earn >= PEEK_EVERY) {
-    save.earn = 0;
-    save.peeks = (save.peeks || 0) + 1;
-    return { text: ' · +1 kik 👁', unlocked: false };
-  }
-  return { text: '', unlocked: false };
-}
-
 function finish(win, reason = 'time') {
   closePeek();
   S.phase = 'ended';
@@ -1691,14 +1666,10 @@ function finish(win, reason = 'time') {
     l: settings.level, m: S.modeNow, d: settings.difficulty, w: win ? 1 : 0, t: Math.round(used), x: S.wrongTurns,
     r: win ? '' : reason, c: S.clocksGot || 0,
   }].slice(-40);
+  const firstClear = win && !cleared(settings.level);
   let stars = 0;
-  let award = { text: '', unlocked: false };
+  S.won = win;
   if (win) {
-    if (!S.intro && bestStars(settings.level) === 0) award = awardClear(settings.level);
-    if (S.clockTotal && S.clocksGot === S.clockTotal) {
-      save.peeks = (save.peeks || 0) + 1;
-      award.text += ' · alla klockor! +1 kik 👁';
-    }
     stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
@@ -1713,19 +1684,12 @@ function finish(win, reason = 'time') {
     $('res-stars').innerHTML = [0, 1, 2]
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
-      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${award.text}`
+      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : ''}`
       : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
         : save.lives > 0 ? `Du har ${save.lives} liv kvar.` : 'Slut på liv. Du får fem nya.';
     if (!win && !S.intro && save.lives === 0) { save.lives = MAX_LIVES; writeSave(); }
     show($('res-next'), win);
     show($('result'));
-    if (award.unlocked) {
-      showDialog({
-        title: 'Ny hjälp: Kika!',
-        text: `Du har klarat ${PEEK_HARD_TO_UNLOCK} svåra banor och får ${PEEK_FREE} kikar. När du står still kan du trycka på kompassen för att se kartan och var du är. Tiden och monstret fortsätter, så använd dem klokt. Du får en ny kik för var ${PEEK_EVERY}:e bana du klarar.`,
-        primary: 'Tack!',
-      });
-    }
   }, win ? 1400 : 1200);
 }
 
@@ -1940,6 +1904,48 @@ function levelOrder() {
   return ids;
 }
 
+// ---------- Progression: man måste klara en bana för att kunna spela nästa ----------
+const isSide = (id) => expeditionIds().includes(id) || clockIds().includes(id);
+const mainPath = () => levelOrder().filter((id) => !isSide(id));
+const sideAfter = (id) => { const p = levelInfo(id); return p.expedition?.after ?? p.clock?.after ?? null; };
+
+function cleared(id) {
+  return isIntro(id) ? !!save.intro?.[id] || bestStars(id) > 0 : bestStars(id) > 0;
+}
+
+/** Expeditioner och klockbanor är frivilliga och öppnas av banan de ligger efter. De stoppar inte huvudspåret. */
+function unlocked(id) {
+  if (save.openLevels || cleared(id)) return true;
+  if (isSide(id)) { const after = sideAfter(id); return after === null || cleared(after); }
+  const main = mainPath();
+  const i = main.indexOf(id);
+  if (i <= 0) return true;
+  // Upplåst om föregående är klarad (eller en senare, för äldre sparfiler)
+  return cleared(main[i - 1]) || main.slice(i).some(cleared);
+}
+
+/** Första banan på huvudspåret som inte är klarad. */
+function frontier() {
+  const main = mainPath();
+  return main.find((id) => !cleared(id)) ?? main[main.length - 1];
+}
+
+/** Vad som behövs för att öppna en bana, som text. */
+function lockReason(id) {
+  const label = (x) => (isIntro(x) ? `introduktion ${introIds().indexOf(x) + 1}` : `bana ${x}`);
+  if (isSide(id)) return `Klara ${label(sideAfter(id))} för att öppna den här.`;
+  const main = mainPath();
+  return `Klara ${label(main[main.indexOf(id) - 1])} först.`;
+}
+
+/** Banan som ska spelas efter att man klarat den nuvarande. */
+function nextAfter(id) {
+  const main = mainPath();
+  const i = main.indexOf(id);
+  const next = i >= 0 ? main[i + 1] : frontier();
+  return next && unlocked(next) ? next : id;
+}
+
 /** Typ och namn på en bana, till kartan. Betyget från banans analys används om det finns. */
 function levelType(level) {
   const p = levelInfo(level);
@@ -2022,14 +2028,16 @@ function renderMap(scroll = false) {
     const isC = t.key === 'clock';
     const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
+    const locked = !unlocked(id);
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
       + (isE ? '<span class="mons">🧭</span>' : '')
       + (isC ? '<span class="mons">⏰</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
+      + (locked ? '<span class="lock">🔒</span>' : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
-      + `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span></button>`;
+      + (locked ? '' : `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span>`) + '</button>';
   });
   inner.innerHTML = html;
   if (scroll) {
@@ -2039,6 +2047,7 @@ function renderMap(scroll = false) {
 }
 
 function refreshMenu(scroll = false) {
+  if (!unlocked(settings.level)) settings.level = frontier();
   $('stat-stars').textContent = `★ ${totalStars()}`;
   $('stat-lives').textContent = `❤ ${save.lives}`;
   $('hero-emoji').textContent = heroEmoji();
@@ -2066,7 +2075,12 @@ function refreshMenu(scroll = false) {
 $('map-inner').addEventListener('click', (e) => {
   const node = e.target.closest('.node');
   if (!node) return;
-  settings.level = Number(node.dataset.level);
+  const id = Number(node.dataset.level);
+  if (!unlocked(id)) {
+    showDialog({ title: 'Låst 🔒', text: lockReason(id), primary: 'Okej' });
+    return;
+  }
+  settings.level = id;
   save.level = settings.level;
   writeSave();
   refreshMenu();
@@ -2105,12 +2119,8 @@ $('snd-sfx').checked = save.sfx !== false;
 $('snd-music').checked = save.music !== false;
 $('snd-sfx').onchange = () => { save.sfx = $('snd-sfx').checked; writeSave(); audio.setEnabled({ sfx: save.sfx }); };
 $('snd-music').onchange = () => { save.music = $('snd-music').checked; writeSave(); audio.setEnabled({ music: save.music }); };
-$('dbg-peeks').checked = !!save.peekUnlocked;
-$('dbg-peeks').onchange = () => {
-  save.peekUnlocked = $('dbg-peeks').checked;
-  if (save.peekUnlocked) save.peeks = Math.max(save.peeks || 0, PEEK_FREE);
-  writeSave();
-};
+$('dbg-levels').checked = !!save.openLevels;
+$('dbg-levels').onchange = () => { save.openLevels = $('dbg-levels').checked; writeSave(); refreshMenu(); };
 $('dbg-unlock').checked = !!save.unlockAll;
 $('dbg-unlock').onchange = () => { save.unlockAll = $('dbg-unlock').checked; writeSave(); };
 
@@ -2129,9 +2139,7 @@ $('play').onclick = () => startLevel();
 $('ready').onclick = beginPlay;
 $('res-again').onclick = () => startLevel();
 $('res-next').onclick = () => {
-  const ids = levelOrder();
-  const k = ids.indexOf(settings.level);
-  settings.level = ids[Math.min(ids.length - 1, k + 1)];
+  settings.level = nextAfter(settings.level);
   startLevel();
 };
 function backToMenu() {
@@ -2156,7 +2164,10 @@ function backToMenu() {
   show($('danger'), false);
   show($('rear'), false);
 }
-$('res-menu').onclick = backToMenu;
+$('res-menu').onclick = () => {
+  if (S.won) { settings.level = nextAfter(settings.level); save.level = settings.level; writeSave(); }
+  backToMenu();
+};
 
 // ---------- Feedback ----------
 function feedbackReport(text) {
@@ -2170,7 +2181,7 @@ function feedbackReport(text) {
     `Skärm: ${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x`,
     `Enhet: ${navigator.userAgent}`,
     `Läge: ${settings.mode}, tempo: ${settings.difficulty}, nuvarande bana: ${settings.level}`,
-    `Stjärnor: ${totalStars()}, kikar: ${save.peeks ?? 0}`,
+    `Stjärnor: ${totalStars()}`,
     `Senaste banorna:`,
     log || '  (inga än)',
   ].join('\n');
@@ -2313,14 +2324,14 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
 function firstLevel() {
   const intros = introIds();
   const wanted = save.level ?? (intros[0] ?? 1);
-  return levelOrder().includes(wanted) ? wanted : 1;
+  return levelOrder().includes(wanted) && unlocked(wanted) ? wanted : frontier();
 }
 let levelsReady = false;
 settings.level = firstLevel();

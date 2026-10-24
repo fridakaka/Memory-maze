@@ -315,3 +315,6 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; border-radius: 14px; border: 2px solid var(--soft); background: #fff; color: var(--ink); resize: vertical; margin: 6px 0 12px; user-select: text; -webkit-user-select: text; }
 .menu-foot { display: flex; justify-content: space-between; align-items: center; font-size: 13px; opacity: .85; margin: 2px 4px 8px; }
 .linkish { background: none; box-shadow: none; padding: 6px 10px; font-size: 14px; font-weight: 800; color: var(--accent); }
+
+.node.locked { background: #8b8f87; color: rgba(255,255,255,.75); border-color: #c9cbc4; filter: saturate(.3); }
+.node .lock { position: absolute; top: -10px; right: -10px; font-size: 20px; text-shadow: none; }
