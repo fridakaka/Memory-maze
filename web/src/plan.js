@@ -14,6 +14,7 @@ export const THEME_INFO = [
   { id: 'reef', noWeather: true },
   { id: 'space', noWeather: true },
   { id: 'aquarium', noWeather: true },
+  { id: 'forest', sunOnly: true },
   { id: 'stone' },
 ];
 
@@ -44,6 +45,7 @@ export function themeIdFor(level) {
 export function weatherIdFor(level, themeId) {
   const info = THEME_INFO.find((t) => t.id === themeId);
   if (info?.noWeather) return 'none';
+  if (info?.sunOnly) return 'sun'; // skogen är alltid en solig dag
   if (level <= 3) return 'sun';
   const r = mulberry32(level * 40503 + 11)();
   if (r < 0.3) return 'sun';

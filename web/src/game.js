@@ -721,6 +721,111 @@ function updateFish(dt) {
   }
 }
 
+// ---------- Skog: fåglar som flyger omkring framför figuren ----------
+let birdGroup = null;
+
+function clearBirds() {
+  if (!birdGroup) return;
+  scene.remove(birdGroup);
+  birdGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  birdGroup = null;
+}
+
+function makeBirdMesh(color, belly, size) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const bellyMat = new THREE.MeshLambertMaterial({ color: belly });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), mat);
+  body.scale.set(1.25, 0.8, 0.8);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), bellyMat);
+  chest.scale.set(1.1, 0.6, 0.7);
+  chest.position.set(0.1, -0.12, 0);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), mat);
+  head.position.set(0.62, 0.18, 0);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28, 6), new THREE.MeshLambertMaterial({ color: 0xffa726 }));
+  beak.rotation.z = -Math.PI / 2;
+  beak.position.set(0.95, 0.15, 0);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.28), mat);
+  tail.position.set(-0.78, 0.02, 0);
+  tail.rotation.z = 0.18;
+  g.add(body, chest, head, beak, tail);
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    eye.position.set(0.8, 0.26, 0.2 * side);
+    g.add(eye);
+  }
+  // Vingar: fästa i kroppen och slår upp och ned
+  const wings = [];
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(0.05, 0.15, 0.2 * side);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 0.95), mat);
+    wing.position.set(-0.05, 0, 0.47 * side);
+    pivot.add(wing);
+    g.add(pivot);
+    wings.push({ pivot, side });
+  }
+  g.userData.wings = wings;
+  g.scale.setScalar(size);
+  return g;
+}
+
+function makeBirdGroup() {
+  clearBirds();
+  birdGroup = new THREE.Group();
+  const kinds = [
+    [0x3d86d8, 0xffe27a], // blåmes
+    [0x8a5a34, 0xe8503a], // rödhake
+    [0xffd23f, 0xfff0a0], // gulsparv
+    [0xf4f4f4, 0xffffff], // duva
+    [0x5a5a66, 0xd9d9e0], // trast
+  ];
+  birdGroup.userData.list = [];
+  for (let i = 0; i < 12; i++) {
+    const [c, b] = kinds[i % kinds.length];
+    const mesh = makeBirdMesh(c, b, 0.38 + Math.random() * 0.22);
+    birdGroup.add(mesh);
+    birdGroup.userData.list.push({
+      mesh,
+      d: 5 + Math.random() * 9,
+      r: 2 + Math.random() * 4.5,
+      h: 1.4 + Math.random() * 1.3,
+      w: (0.45 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1),
+      ph: Math.random() * TAU,
+      flap: 9 + Math.random() * 5,
+    });
+  }
+  birdGroup.visible = false;
+  birdGroup.userData.nextChirp = 2;
+  scene.add(birdGroup);
+}
+
+function updateBirds(dt) {
+  if (!birdGroup) return;
+  birdGroup.visible = S.phase === 'play' || S.phase === 'ended';
+  if (!birdGroup.visible) return;
+  const ud = birdGroup.userData;
+  ud.t = (ud.t ?? 0) + dt;
+  const t = ud.t;
+  const fx = Math.sin(S.camYaw);
+  const fz = Math.cos(S.camYaw);
+  for (const f of ud.list) {
+    const th = f.w * t + f.ph;
+    const cx = hero.position.x + fx * f.d;
+    const cz = hero.position.z + fz * f.d;
+    f.mesh.position.set(cx + f.r * Math.cos(th), f.h + Math.sin(1.7 * th + f.ph) * 0.45, cz + f.r * 0.8 * Math.sin(th));
+    f.mesh.rotation.y = Math.atan2(-(0.8 * f.r * f.w * Math.cos(th)), -f.r * f.w * Math.sin(th));
+    f.mesh.rotation.z = -Math.cos(1.7 * th + f.ph) * 0.25; // lutar när den stiger och sjunker
+    const flap = Math.sin(t * f.flap + f.ph) * 0.9;
+    for (const w of f.mesh.userData.wings) w.pivot.rotation.x = -w.side * flap;
+  }
+  // Då och då kvittrar en fågel
+  if (S.phase === 'play' && !S.paused && t > ud.nextChirp) {
+    audio.play('chirp');
+    ud.nextChirp = t + 3 + Math.random() * 5;
+  }
+}
+
 function clearFx() {
   if (!fx) return;
   scene.remove(fx.obj);
@@ -839,6 +944,7 @@ function applyWeather(w) {
   hemi.color.setHex(w.hemiColor ?? theme.hemiColor ?? 0xe6f0ff);
   makeFx(w.fx ?? theme.fx);
   if (theme.fish) { if (!fishGroup) makeFishGroup(); } else clearFish();
+  if (theme.birds) { if (!birdGroup) makeBirdGroup(); } else clearBirds();
   setAccessory(hero, w.id);
   setHelmet(hero, theme.id === 'space');
   attachFlash(w.id === 'night');
@@ -2003,6 +2109,7 @@ function frame(now) {
     updateFade(dt);
     updateFx(dt);
     updateFish(dt);
+    updateBirds(dt);
     beam.visible = weather.id === 'night' && (S.phase === 'play' || S.phase === 'ended');
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster' && !S.peek) renderRear();
@@ -2625,7 +2732,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, chapter, skipLevel, finish, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, chapter, skipLevel, finish, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; }, get birds() { return birdGroup; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.

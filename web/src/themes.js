@@ -929,6 +929,118 @@ const aquaSky = (ctx, w, h) => {
   }
 };
 
+// ---------- Skog ----------
+/** Träd som vägg: stammar nedtill och en tät grön krona upptill. */
+const forestWall = (ctx, n) => {
+  // bakgrund: skuggig skogsbotten
+  ctx.fillStyle = '#243a1f';
+  ctx.fillRect(0, 0, n, n);
+  // stammar
+  const trunks = 4;
+  for (let i = 0; i < trunks; i++) {
+    const x = (i + 0.5) * (n / trunks) + (rnd() - 0.5) * 8;
+    const w = n / trunks * 0.52;
+    const g = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+    g.addColorStop(0, '#4a2f18');
+    g.addColorStop(0.45, '#7d5430');
+    g.addColorStop(1, '#4a2f18');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2 - 6, n);
+    ctx.quadraticCurveTo(x - w / 2, n * 0.7, x - w / 2 + 2, n * 0.4);
+    ctx.lineTo(x + w / 2 - 2, n * 0.4);
+    ctx.quadraticCurveTo(x + w / 2, n * 0.7, x + w / 2 + 6, n);
+    ctx.fill();
+    // barkränder
+    ctx.strokeStyle = 'rgba(40,24,10,0.55)';
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 5; k++) {
+      const bx = x - w / 2 + 6 + rnd() * (w - 12);
+      ctx.beginPath(); ctx.moveTo(bx, n * 0.42 + rnd() * 20); ctx.lineTo(bx + (rnd() - 0.5) * 6, n - rnd() * 14); ctx.stroke();
+    }
+    // en kvist-knöl
+    ctx.fillStyle = '#3a2412';
+    ctx.beginPath(); ctx.ellipse(x + (rnd() - 0.5) * w * 0.4, n * (0.55 + rnd() * 0.25), 5, 8, 0, 0, TAU); ctx.fill();
+  }
+  // gräs och ormbunkar längst ned
+  for (let i = 0; i < 40; i++) {
+    const x = rnd() * n;
+    ctx.strokeStyle = pick(['#3f8f3a', '#5fb04a', '#2f7a30']);
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, n); ctx.lineTo(x + (rnd() - 0.5) * 14, n - 14 - rnd() * 18); ctx.stroke();
+  }
+  // kronan: överlappande lövklumpar
+  const greens = ['#2f7f35', '#3f9a3f', '#58b94a', '#276b2d', '#6fc355'];
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * n;
+    const y = rnd() * n * 0.5;
+    const r = 14 + rnd() * 22;
+    ctx.fillStyle = pick(greens);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * n;
+    const y = n * 0.06 + rnd() * n * 0.44;
+    ctx.fillStyle = 'rgba(255,255,170,0.30)';
+    ctx.beginPath(); ctx.arc(x - 4, y - 4, 7 + rnd() * 7, 0, TAU); ctx.fill();
+  }
+  // bär och blommor
+  for (let i = 0; i < 9; i++) {
+    const x = rnd() * n;
+    const y = n * 0.08 + rnd() * n * 0.42;
+    ctx.fillStyle = pick(['#e8404a', '#ffe066', '#ffffff', '#ff8fb0']);
+    ctx.beginPath(); ctx.arc(x, y, 3.2, 0, TAU); ctx.fill();
+  }
+  // mjuk skugga mellan krona och stam
+  const sh = ctx.createLinearGradient(0, n * 0.4, 0, n * 0.55);
+  sh.addColorStop(0, 'rgba(10,30,10,0.45)');
+  sh.addColorStop(1, 'rgba(10,30,10,0)');
+  ctx.fillStyle = sh;
+  ctx.fillRect(0, n * 0.4, n, n * 0.15);
+};
+
+const forestTop = (ctx, n) => {
+  speckle(ctx, n, '#3f9a3f', ['#2f7f35', '#58b94a', '#7acb5a', '#276b2d'], 1100, 3, 9);
+  ctx.fillStyle = 'rgba(255,255,190,0.28)';
+  for (let i = 0; i < 50; i++) {
+    ctx.beginPath(); ctx.arc(rnd() * n, rnd() * n, 4 + rnd() * 8, 0, TAU); ctx.fill();
+  }
+};
+
+/** Skogsbotten: jord, mossa, löv, små blommor och svampar. */
+const forestFloor = (ctx, n) => {
+  speckle(ctx, n, '#8a6a40', ['#7a5a34', '#9a7a4a', '#6b8f3a', '#5f7a35', '#a98a56'], 1700, 2, 5);
+  for (let i = 0; i < 70; i++) {
+    ctx.save();
+    ctx.translate(rnd() * n, rnd() * n);
+    ctx.rotate(rnd() * TAU);
+    ctx.fillStyle = pick(['#c9822b', '#d9a53a', '#9a4a22', '#b5651d']);
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 3.4, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  for (let i = 0; i < 36; i++) {
+    const x = rnd() * n;
+    const y = rnd() * n;
+    ctx.strokeStyle = pick(['#4f9a3a', '#6fb04a']);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (rnd() - 0.5) * 8, y - 8 - rnd() * 8); ctx.stroke();
+  }
+  for (let i = 0; i < 14; i++) {
+    const x = rnd() * n;
+    const y = rnd() * n;
+    ctx.fillStyle = pick(['#ffffff', '#ffe066', '#ff9ec7']);
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, TAU); ctx.fill();
+  }
+  for (let i = 0; i < 3; i++) {
+    const x = 20 + rnd() * (n - 40);
+    const y = 20 + rnd() * (n - 40);
+    ctx.fillStyle = '#d8403c';
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff';
+    for (const [dx, dy] of [[-3, -2], [3, 1], [0, 4]]) { ctx.beginPath(); ctx.arc(x + dx, y + dy, 1.8, 0, TAU); ctx.fill(); }
+  }
+};
+
 /**
  * Teman. `side` och `top` ritar väggarna, `floor` golvet och `sky` bakgrunden
  * i spelvyn. `ground` är färgen runt labyrinten på kartan, `fog` dimman.
@@ -945,6 +1057,7 @@ export const THEMES = [
   { id: 'reef', noWeather: true, name: 'Korallgrotta', fx: 'bubbles', fogRange: [3.2, 8], side: coral, top: coral, floor: sand, ground: 0x0b3a5c, fog: 0x1f7fa8, skyDraw: reefSky, sky: ['#0a4a78', '#1b86b8', '#4fb0d4'] },
   { id: 'space', noWeather: true, name: 'Rymdstation', texSize: 512, fx: 'motes', fogRange: [4, 10], hemi: 1.0, hemiColor: 0x8fb4ff, sunColor: 0xdfe8ff, side: spaceWall(false), glow: spaceWall(true), top: spaceTop, floor: spaceFloor(false), floorGlow: spaceFloor(true), ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: nebulaSky, skyAspect: true, sky: ['#02030a', '#0a0e20', '#141a33'] },
   { id: 'aquarium', noWeather: true, name: 'Akvarium', fx: 'bubbles', fish: true, fogRange: [5, 15], hemi: 1.15, hemiColor: 0xd6f6ff, side: aquaWall, top: aquaTop, floor: aquaFloor, ground: 0x2a9bbf, fog: 0x8fe0ee, skyDraw: aquaSky, sky: ['#2aa6d0', '#6fd3e8', '#bff2f6'] },
+  { id: 'forest', name: 'Skog', birds: true, fogRange: [6, 16], side: forestWall, top: forestTop, floor: forestFloor, ground: 0x4f7a3a, fog: 0xdff0d8, sky: ['#6fb6f0', '#b7defa', '#eaf6ff'] },
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
 ];
 

@@ -99,6 +99,11 @@ export function createSynth(ctx, out) {
       noise(t, { dur: 0.28, vol: 0.1, type: 'bandpass', f: 400, to: 2400 });
       tone(t, { f: 500, to: 1000, dur: 0.25, type: 'triangle', vol: 0.12 });
     },
+    chirp: (t) => {
+      tone(t, { f: 2300, to: 3300, dur: 0.07, type: 'sine', vol: 0.1 });
+      tone(t + 0.1, { f: 3200, to: 2200, dur: 0.09, type: 'sine', vol: 0.09 });
+      if (Math.random() < 0.5) tone(t + 0.22, { f: 2600, to: 3400, dur: 0.06, type: 'sine', vol: 0.08 });
+    },
     tick: (t) => tone(t, { f: 1100, dur: 0.03, type: 'square', vol: 0.06 }),
     beat: (t) => {
       tone(t, { f: 62, to: 42, dur: 0.14, vol: 0.5 });

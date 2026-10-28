@@ -17,6 +17,7 @@ export const MONSTER_BY_THEME = {
   space: 'robot',
   stone: 'golem',
   aquarium: 'jelly',
+  forest: 'classic',
 };
 
 const lam = (color, emissive = 0x000000, extra = {}) =>
