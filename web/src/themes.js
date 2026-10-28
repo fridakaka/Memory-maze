@@ -825,6 +825,110 @@ const sky = (top, mid, bottom) => (ctx, n, h = n) => {
   ctx.fillRect(0, 0, n, h);
 };
 
+// ---------- Akvarium ----------
+/** Glasruta i ett akvarium: ljusblått glas med bubblor, sjögräs och små fiskar. */
+const aquaWall = (ctx, n) => {
+  const g = ctx.createLinearGradient(0, 0, 0, n);
+  g.addColorStop(0, '#c6f1ff');
+  g.addColorStop(0.55, '#8edcf2');
+  g.addColorStop(1, '#4fb8dc');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, n, n);
+  // ljusstrimmor
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  for (let i = 0; i < 4; i++) {
+    const x = rnd() * n;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 18, 0); ctx.lineTo(x + 60, n); ctx.lineTo(x + 30, n); ctx.fill();
+  }
+  // bubblor
+  for (let i = 0; i < 16; i++) {
+    const x = rnd() * n;
+    const y = rnd() * n * 0.8;
+    const r = 2 + rnd() * 6;
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.25, 0, TAU); ctx.fill();
+  }
+  // en liten fisk i glaset
+  const fish = (x, y, dir, color) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(dir, 1);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.ellipse(0, 0, 13, 8, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(-22, -8); ctx.lineTo(-22, 8); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(6, -2, 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(7, -2, 1.5, 0, TAU); ctx.fill();
+    ctx.restore();
+  };
+  fish(n * 0.3 + rnd() * n * 0.2, n * 0.3 + rnd() * n * 0.15, rnd() < 0.5 ? 1 : -1, pick(['#ff9a3d', '#ffd24a', '#ff6f9a']));
+  fish(n * 0.55 + rnd() * n * 0.2, n * 0.55, rnd() < 0.5 ? 1 : -1, pick(['#ffd24a', '#c77dff', '#ff8a5a']));
+  // sjögräs nedtill
+  for (let i = 0; i < 9; i++) {
+    const x = (i + rnd()) * (n / 9);
+    ctx.strokeStyle = pick(['#2fa84f', '#46c060', '#1f8f4a']);
+    ctx.lineWidth = 5 + rnd() * 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, n);
+    ctx.bezierCurveTo(x - 14, n * 0.9, x + 14, n * 0.82, x + (rnd() - 0.5) * 24, n * (0.72 + rnd() * 0.1));
+    ctx.stroke();
+  }
+  // silikonskarvar
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, n - 4, n - 4);
+};
+
+const aquaTop = (ctx, n) => speckle(ctx, n, '#d4f6ff', ['#c2eefb', '#e4fbff', '#b6e8f7'], 600, 3, 10);
+
+/** Färgglatt akvariegrus. */
+const aquaFloor = (ctx, n) => {
+  speckle(ctx, n, '#e9dcc4', ['#d9c9a8', '#f4e8d0', '#c9d8e0', '#e8c8c0', '#bfe0d0', '#f0d890'], 2000, 2, 6);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const cx = rnd() * n;
+    const cy = rnd() * n;
+    ctx.beginPath();
+    for (let a = 0; a <= TAU + 0.1; a += 0.5) {
+      const r = 22 + Math.sin(a * 3 + i) * 6;
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    ctx.stroke();
+  }
+};
+
+/** Vatten som himmel: ljusstrålar från ytan och bubblor. */
+const aquaSky = (ctx, w, h) => {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#2aa6d0');
+  g.addColorStop(0.5, '#6fd3e8');
+  g.addColorStop(1, '#bff2f6');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  for (let i = 0; i < 7; i++) {
+    const x = rnd() * w;
+    ctx.beginPath();
+    ctx.moveTo(x, 0); ctx.lineTo(x + 36, 0); ctx.lineTo(x + 110 + rnd() * 50, h); ctx.lineTo(x + 20, h);
+    ctx.fill();
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * w;
+    const y = rnd() * h;
+    const r = 2 + rnd() * 7;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  }
+};
+
 /**
  * Teman. `side` och `top` ritar väggarna, `floor` golvet och `sky` bakgrunden
  * i spelvyn. `ground` är färgen runt labyrinten på kartan, `fog` dimman.
@@ -840,6 +944,7 @@ export const THEMES = [
   { id: 'candy', noWeather: true, name: 'Godisland', side: candy, top: flat('#ffd1e6', ['#ffc2de', '#ffe0f0']), floor: candyFloor, ground: 0xd98ab0, fog: 0xffd9ec, sky: ['#ff9ed0', '#ffc2e0', '#ffe3f1'] },
   { id: 'reef', noWeather: true, name: 'Korallgrotta', fx: 'bubbles', fogRange: [3.2, 8], side: coral, top: coral, floor: sand, ground: 0x0b3a5c, fog: 0x1f7fa8, skyDraw: reefSky, sky: ['#0a4a78', '#1b86b8', '#4fb0d4'] },
   { id: 'space', noWeather: true, name: 'Rymdstation', texSize: 512, fx: 'motes', fogRange: [4, 10], hemi: 1.0, hemiColor: 0x8fb4ff, sunColor: 0xdfe8ff, side: spaceWall(false), glow: spaceWall(true), top: spaceTop, floor: spaceFloor(false), floorGlow: spaceFloor(true), ground: 0x0a0d1a, fog: 0x0e1224, skyDraw: nebulaSky, skyAspect: true, sky: ['#02030a', '#0a0e20', '#141a33'] },
+  { id: 'aquarium', noWeather: true, name: 'Akvarium', fx: 'bubbles', fish: true, fogRange: [5, 15], hemi: 1.15, hemiColor: 0xd6f6ff, side: aquaWall, top: aquaTop, floor: aquaFloor, ground: 0x2a9bbf, fog: 0x8fe0ee, skyDraw: aquaSky, sky: ['#2aa6d0', '#6fd3e8', '#bff2f6'] },
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
 ];
 

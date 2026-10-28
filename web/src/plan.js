@@ -13,6 +13,7 @@ export const THEME_INFO = [
   { id: 'candy', noWeather: true },
   { id: 'reef', noWeather: true },
   { id: 'space', noWeather: true },
+  { id: 'aquarium', noWeather: true },
   { id: 'stone' },
 ];
 

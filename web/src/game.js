@@ -640,6 +640,87 @@ const bubbleTexture = dotTexture((ctx) => {
 const FX_RADIUS = 6;
 const FX_HEIGHT = 6;
 
+// ---------- Akvarium: fiskar som simmar i luften framför figuren ----------
+let fishGroup = null;
+
+function clearFish() {
+  if (!fishGroup) return;
+  scene.remove(fishGroup);
+  fishGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  fishGroup = null;
+}
+
+function makeFishMesh(color, size, tailScale = 1) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), mat);
+  body.scale.set(1.1, 0.65, 0.45);
+  const tail = new THREE.Group();
+  tail.position.x = -0.95;
+  const tailMesh = new THREE.Mesh(new THREE.ConeGeometry(0.5 * tailScale, 0.85, 8), mat);
+  tailMesh.rotation.z = Math.PI / 2;
+  tailMesh.position.x = -0.35;
+  tailMesh.scale.set(1, 1, 0.35);
+  tail.add(tailMesh);
+  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 6), mat);
+  fin.position.set(0, 0.62, 0);
+  fin.scale.set(1, 1, 0.3);
+  g.add(body, tail, fin);
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    eye.position.set(0.62, 0.14, 0.36 * side);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
+    pupil.position.set(0.7, 0.14, 0.4 * side);
+    g.add(eye, pupil);
+  }
+  g.userData.tail = tail;
+  g.scale.setScalar(size);
+  return g;
+}
+
+function makeFishGroup() {
+  clearFish();
+  fishGroup = new THREE.Group();
+  const colors = [0xff9a3d, 0xffd24a, 0xff6f9a, 0x6fd3ff, 0xc77dff, 0xffffff, 0x7be08a, 0xff6a5a];
+  fishGroup.userData.list = [];
+  for (let i = 0; i < 18; i++) {
+    const big = i === 0; // en stor val
+    const mesh = big ? makeFishMesh(0x4f7fd8, 2.6, 1.6) : makeFishMesh(colors[i % colors.length], 0.4 + Math.random() * 0.4);
+    fishGroup.add(mesh);
+    fishGroup.userData.list.push({
+      mesh,
+      d: big ? 16 : 5 + Math.random() * 7, // hur långt framför figuren banan går
+      r: big ? 6 : 1.5 + Math.random() * 3.5,
+      h: big ? 2.4 : 1.3 + Math.random() * 1.5,
+      w: (big ? 0.12 : 0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1),
+      ph: Math.random() * TAU,
+    });
+  }
+  fishGroup.visible = false;
+  scene.add(fishGroup);
+}
+
+function updateFish(dt) {
+  if (!fishGroup) return;
+  fishGroup.visible = S.phase === 'play' || S.phase === 'ended';
+  if (!fishGroup.visible) return;
+  fishGroup.userData.t = (fishGroup.userData.t ?? 0) + dt;
+  const t = fishGroup.userData.t;
+  const fx = Math.sin(S.camYaw);
+  const fz = Math.cos(S.camYaw);
+  for (const f of fishGroup.userData.list) {
+    const th = f.w * t + f.ph;
+    const cx = hero.position.x + fx * f.d;
+    const cz = hero.position.z + fz * f.d;
+    const dx = f.r * Math.cos(th);
+    const dz = f.r * 0.85 * Math.sin(th);
+    f.mesh.position.set(cx + dx, f.h + Math.sin(2 * th + f.ph) * 0.25, cz + dz);
+    f.mesh.rotation.y = Math.atan2(-(0.85 * f.r * f.w * Math.cos(th)), -f.r * f.w * Math.sin(th));
+    f.mesh.rotation.z = Math.cos(2 * th + f.ph) * 0.12;
+    f.mesh.userData.tail.rotation.y = Math.sin(t * 8 + f.ph) * 0.45;
+  }
+}
+
 function clearFx() {
   if (!fx) return;
   scene.remove(fx.obj);
@@ -757,6 +838,7 @@ function applyWeather(w) {
   hemi.intensity = w.hemi ?? theme.hemi ?? 1.35;
   hemi.color.setHex(w.hemiColor ?? theme.hemiColor ?? 0xe6f0ff);
   makeFx(w.fx ?? theme.fx);
+  if (theme.fish) { if (!fishGroup) makeFishGroup(); } else clearFish();
   setAccessory(hero, w.id);
   setHelmet(hero, theme.id === 'space');
   attachFlash(w.id === 'night');
@@ -1899,6 +1981,7 @@ function frame(now) {
     S.shakeBurst -= dt;
     updateFade(dt);
     updateFx(dt);
+    updateFish(dt);
     beam.visible = weather.id === 'night' && (S.phase === 'play' || S.phase === 'ended');
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster' && !S.peek) renderRear();
@@ -2136,6 +2219,13 @@ function renderMap(scroll = false) {
       }
     }
   }
+  // Vimplar över gången mellan två kapitel
+  ids.forEach((id, k) => {
+    const c = chapterOf(id);
+    if (c === null || c === 0 || (id - 1) % CHAPTER_SIZE !== 0 || k === 0) return;
+    const y = (pos[k].y + pos[k - 1].y) / 2 - 14;
+    html += `<svg class="bunting" style="top:${y}px" viewBox="0 0 120 28" preserveAspectRatio="none" width="100%" height="28" aria-hidden="true"><defs><pattern id="bunt${c}" width="60" height="28" patternUnits="userSpaceOnUse"><polygon points="4,3 22,3 13,24" fill="#ff6b8b"/><polygon points="34,3 52,3 43,24" fill="#ffd54a"/></pattern></defs><rect y="1" width="100%" height="3" fill="#7a5a3a"/><rect y="0" width="100%" height="28" fill="url(#bunt${c})"/></svg>`;
+  });
   // Skylt och vinkande figur vid varje kapitelstart
   const CHEERS = ['Hej!', 'Heja!', 'Kom igen!', 'Du klarar det!', 'Bra jobbat!', 'Härligt!'];
   ids.forEach((id, k) => {

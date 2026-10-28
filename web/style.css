@@ -358,3 +358,5 @@ textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; b
 @keyframes drift { from { transform: translateX(0); } to { transform: translateX(calc(100vw + 400px)); } }
 @keyframes waving { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(22deg); } }
 @media (prefers-reduced-motion: reduce) { .deco, .deco.flowers span, .cloud, .wave .fig, .wave .hand { animation: none; } }
+
+.map-inner svg.bunting { position: absolute; left: 0; width: 100%; height: 28px; inset: auto; pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0,0,0,.15)); }

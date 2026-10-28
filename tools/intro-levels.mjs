@@ -15,7 +15,7 @@ export const INTRO_LEVELS = [
     title: 'Så spelar du',
     width: 6, height: 5,
     paths: [
-      [[0, 4], [1, 4], [1, 3], [1, 2], [2, 2], [3, 2], [3, 3], [3, 4], [4, 4], [5, 4], [5, 3], [5, 2], [5, 1], [5, 0]],
+      [[1, 4], [1, 3], [1, 2], [2, 2], [3, 2], [3, 3], [3, 4], [4, 4], [5, 4], [5, 3], [5, 2], [5, 1], [5, 0]],
       [[1, 2], [1, 1], [1, 0], [2, 0]],
       [[3, 2], [3, 1], [2, 1]],
       [[5, 2], [4, 2]],
@@ -33,7 +33,7 @@ export const INTRO_LEVELS = [
       { when: 'deadend', text: 'Återvändsgränd! Ibland väljer man fel väg. Det är inte farligt, det kostar bara tid. Tryck på "Vänd" så springer figuren tillbaka till korsningen.', hi: 'back' },
     ],
     guides: [
-      { x: 0, y: 4, dirs: ['E'], text: 'Tryck på pilen för att springa.', only: true },
+      { x: 1, y: 4, dirs: ['N'], text: 'Tryck på pilen för att springa.', only: true },
       { x: 1, y: 2, dirs: ['N', 'E'], text: 'Prova den här vägen först!', only: true },
       { x: 2, y: 0, dirs: ['W'], text: 'Tryck på Vänd.', only: true },
       { x: 3, y: 2, dirs: ['S'], text: 'Välj den blinkande pilen.', only: true },

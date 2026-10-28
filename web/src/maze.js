@@ -46,7 +46,7 @@ export function levelParams(level) {
   return {
     width: size,
     height: size + (d > 0.2 ? 1 : 0),
-    loops: d < 0.2 ? 0 : Math.round(d * 7),
+    loops: Math.max(3, Math.round(d * 7)), // alltid några loopar, så att "håll höger" inte räcker
     seed: level * 7919 + 17,
     d,
     mode,
@@ -65,6 +65,35 @@ function makesOpenSquare(open, x1, y1, x2, y2) {
   const y = Math.min(y1, y2);
   return y1 === y2 ? squareIsOpen(open, x, y) || squareIsOpen(open, x, y - 1)
     : squareIsOpen(open, x, y) || squareIsOpen(open, x - 1, y);
+}
+
+const TURN_RIGHT = { N: 'E', E: 'S', S: 'W', W: 'N' };
+const TURN_LEFT = { N: 'W', W: 'S', S: 'E', E: 'N' };
+
+/**
+ * Rutorna man besöker om man alltid håller höger (R) eller vänster (L) hand mot väggen.
+ * Starten är på nedre kanten med ingången bakom (blickriktning norrut).
+ */
+export function wallFollowCells(maze, start, hand = 'R') {
+  const turn = hand === 'R' ? TURN_RIGHT : TURN_LEFT;
+  const other = hand === 'R' ? TURN_LEFT : TURN_RIGHT;
+  let { x, y } = start;
+  let h = 'N';
+  const seen = new Set();
+  const cells = new Set();
+  for (let i = 0; i < 200000; i++) {
+    const k = `${x},${y},${h}`;
+    if (seen.has(k)) break;
+    seen.add(k);
+    cells.add(`${x},${y}`);
+    const o = maze.open[y][x];
+    const d = [turn[h], h, other[h], OPPOSITE[h]].find((dir) => o[dir]);
+    if (!d) break;
+    x += DELTA[d].dx;
+    y += DELTA[d].dy;
+    h = d;
+  }
+  return cells;
 }
 
 /** Skapar en labyrint (DFS) med garanterad lösning. */
@@ -122,19 +151,28 @@ export function generateMaze({ width, height, loops = 0, seed = 1 }) {
 
   const maze = { width, height, open };
 
-  // Start slumpas bland nedre kanten, mål är den cell som ligger längst bort.
-  const start = { x: Math.floor(rng() * width), y: height - 1 };
+  // Start: nedre kanten, i en ruta som är öppen norrut, så att figuren står med ryggen mot ingången.
+  const northOpen = [];
+  for (let x = 0; x < width; x++) if (open[height - 1][x].N) northOpen.push(x);
+  const sx = northOpen.length ? northOpen[Math.floor(rng() * northOpen.length)] : Math.floor(rng() * width);
+  const start = { x: sx, y: height - 1 };
   const fromStart = distances(maze, start);
+  // Mål: längst bort bland rutor som man inte når genom att hålla en hand mot väggen hela tiden.
+  const followed = new Set([...wallFollowCells(maze, start, 'R'), ...wallFollowCells(maze, start, 'L')]);
   let goal = start;
   let best = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const dist = fromStart.get(key(x, y));
-      if (dist > best) {
-        best = dist;
-        goal = { x, y };
+  for (const skipFollowed of [true, false]) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (skipFollowed && followed.has(key(x, y))) continue;
+        const dist = fromStart.get(key(x, y));
+        if (dist > best) {
+          best = dist;
+          goal = { x, y };
+        }
       }
     }
+    if (best > 0) break;
   }
   return finalizeMaze(maze, start, goal);
 }

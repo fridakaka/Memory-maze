@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   generateMaze, levelParams, pickHidingSpots, pickLandmarks, encodeMaze, mazeFromPaths,
-  timeLimit, monsterPlan, pickClocks, perfectTime, RUN_SPEED, DECISION_SECONDS,
+  timeLimit, monsterPlan, pickClocks, wallFollowCells, perfectTime, RUN_SPEED, DECISION_SECONDS,
 } from '../web/src/maze.js';
 import { themeIdFor, weatherIdFor } from '../web/src/plan.js';
 import { analyzeLevel } from '../web/src/analysis.js';
@@ -23,6 +23,12 @@ const entries = [];
 const failures = [];
 const seenMazes = new Map();
 
+/** Sant om man kommer fram genom att alltid hålla höger eller vänster hand mot väggen. */
+function wallFollowSolves(maze) {
+  const g = `${maze.goal.x},${maze.goal.y}`;
+  return wallFollowCells(maze, maze.start, 'R').has(g) || wallFollowCells(maze, maze.start, 'L').has(g);
+}
+
 /** Räknar ut tidsgräns eller monsterfart så att de sparas i banans data. */
 function planFor(maze, mode, d) {
   if (mode === 'time') return { timeLimit: timeLimit(maze, d, 'medium') };
@@ -36,12 +42,14 @@ for (let level = 1; level <= TOTAL; level++) {
   let chosen = null;
   let lastProblems = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
-    const params = { ...base, seed: base.seed + attempt * 100003 };
+    const params = { ...base, seed: base.seed + attempt * 100003, loops: base.loops + Math.floor(attempt / 4) };
     const maze = generateMaze(params);
     const spots = base.mode === 'monster' ? pickHidingSpots(maze, params.seed) : [];
     const landmarks = pickLandmarks(maze, base.d, params.seed, spots);
     const level0 = { mode: base.mode, d: base.d };
     const result = analyzeLevel(maze, level0);
+    if (wallFollowSolves(maze)) result.problems.push('Håll höger eller vänster räcker för att nå målet');
+    if (maze.solution.length - 1 < Math.round((maze.width + maze.height) * 0.6)) result.problems.push('För kort väg till målet');
     const key = JSON.stringify(maze.open);
     const dup = seenMazes.get(key);
     if (dup) result.problems.push(`Samma bana som ${dup}`);
@@ -131,12 +139,14 @@ for (const exp of EXPEDITIONS) {
     for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
       const seed = exp.seed + leg * 7919 + attempt * 100003;
       const params = {
-        width: exp.size[0], height: exp.size[1], loops: Math.round(exp.d * 7), seed,
+        width: exp.size[0], height: exp.size[1], loops: Math.round(exp.d * 7) + Math.floor(attempt / 4), seed,
       };
       const maze = generateMaze(params);
       const spots = exp.kind === 'monster' ? pickHidingSpots(maze, seed) : [];
       const landmarks = pickLandmarks(maze, exp.d, seed, spots);
       const result = analyzeLevel(maze, { mode: exp.kind, d: exp.d });
+      if (wallFollowSolves(maze)) result.problems.push('Håll höger eller vänster räcker för att nå målet');
+    if (maze.solution.length - 1 < Math.round((maze.width + maze.height) * 0.6)) result.problems.push('För kort väg till målet');
       const key = JSON.stringify(maze.open);
       if (seenMazes.has(key)) result.problems.push(`Samma bana som ${seenMazes.get(key)}`);
       if (spots.some((sp) => landmarks.some((l) => l.x === sp.x && l.y === sp.y))) result.problems.push('Landmärke på gömställe');
@@ -178,10 +188,12 @@ for (const cl of CLOCK_LEVELS) {
   let lastProblems = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
     const seed = cl.seed + attempt * 100003;
-    const maze = generateMaze({ width: cl.size[0], height: cl.size[1], loops: Math.round(cl.d * 7), seed });
+    const maze = generateMaze({ width: cl.size[0], height: cl.size[1], loops: Math.round(cl.d * 7) + Math.floor(attempt / 4), seed });
     const landmarks = pickLandmarks(maze, cl.d, seed, []);
     const clocks = pickClocks(maze, cl.clocks, seed, landmarks);
     const result = analyzeLevel(maze, { mode: 'free', d: cl.d });
+    if (wallFollowSolves(maze)) result.problems.push('Håll höger eller vänster räcker för att nå målet');
+    if (maze.solution.length - 1 < Math.round((maze.width + maze.height) * 0.6)) result.problems.push('För kort väg till målet');
     const key = JSON.stringify(maze.open);
     if (seenMazes.has(key)) result.problems.push(`Samma bana som ${seenMazes.get(key)}`);
     if (new Set(landmarks.map((l) => l.type)).size !== landmarks.length) result.problems.push('Samma landmärke två gånger');
