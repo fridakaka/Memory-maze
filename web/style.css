@@ -174,10 +174,10 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
   border: 4px solid #fff; box-shadow: 0 4px 0 rgba(0,0,0,.3);
   display: grid; place-items: center;
 }
-.node.easy { background: #4caf50; }
-.node.mid { background: #f0a21b; }
-.node.hard { background: #e0493f; }
-.node.monster { background: #7b4fc4; }
+.node.easy { background-color: #4cc255; }
+.node.mid { background-color: #f5aa22; }
+.node.hard { background-color: #ee5a50; }
+.node.monster { background-color: #8a5fd6; }
 .node .mons { position: absolute; top: -10px; right: -10px; font-size: 20px; text-shadow: none; }
 .node .st { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); font-size: 14px; color: #ffcf33; text-shadow: 0 1px 2px rgba(0,0,0,.6); white-space: nowrap; letter-spacing: 1px; }
 .node .st .off { color: rgba(255,255,255,.5); }
@@ -222,8 +222,8 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 #cut { position: fixed; inset: 0; background: #10180f; opacity: 0; pointer-events: none; transition: opacity .3s ease-out; }
 #cut.on { opacity: 1; transition: opacity .1s ease-in; }
 
-.node.intro { background: #3a78c8; }
-.node.expedition { background: #d9822b; }
+.node.intro { background-color: #4a8be0; }
+.node.expedition { background-color: #e58a2f; }
 
 /* Lämna banan */
 #leave {
@@ -296,7 +296,7 @@ details input { width: 70px; font: inherit; padding: 6px; border-radius: 8px; bo
 #splash .ver { order: 4; margin-top: 14px; font-size: 14px; font-weight: 700; color: #8d95e0; }
 .note { font-size: 14px; margin: 6px 0 0; opacity: .8; }
 
-.node.clock { background: #1fa5a5; }
+.node.clock { background-color: #26b8b8; }
 #pop {
   position: fixed; left: 0; right: 0; top: 34%; text-align: center; z-index: 6; pointer-events: none;
   font-size: 44px; font-weight: 900; color: #ffe27a; -webkit-text-stroke: 7px #5a3d00; paint-order: stroke fill; opacity: 0;
@@ -316,9 +316,45 @@ textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; b
 .menu-foot { display: flex; justify-content: space-between; align-items: center; font-size: 13px; opacity: .85; margin: 2px 4px 8px; }
 .linkish { background: none; box-shadow: none; padding: 6px 10px; font-size: 14px; font-weight: 800; color: var(--accent); }
 
-.node.locked { background: #8b8f87; color: rgba(255,255,255,.75); border-color: #c9cbc4; filter: saturate(.3); }
+.node.locked { background-color: #aab4c4; color: rgba(255,255,255,.85); border-color: #e4e9f2; filter: saturate(.6); }
 .node .lock { position: absolute; top: -10px; right: -10px; font-size: 20px; text-shadow: none; }
 
-.chap-tag { position: absolute; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.88); color: var(--ink); font-weight: 900; font-size: 14px; padding: 3px 14px; border-radius: 12px; box-shadow: 0 2px 0 rgba(0,0,0,.2); pointer-events: none; }
+.chap-tag-old { position: absolute; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.88); color: var(--ink); font-weight: 900; font-size: 14px; padding: 3px 14px; border-radius: 12px; box-shadow: 0 2px 0 rgba(0,0,0,.2); pointer-events: none; }
 .chap-tag.done { background: #ffe9a8; }
 #res-skip { background: #f7e1b8; }
+
+/* Kartan: äng med moln, blommor och vinkande figurer */
+.map { background: #7fcf62; }
+.map-inner {
+  background:
+    radial-gradient(rgba(255,255,255,.18) 2px, transparent 3px) 0 0 / 44px 44px,
+    radial-gradient(rgba(0,80,0,.07) 3px, transparent 4px) 22px 22px / 62px 62px,
+    linear-gradient(#a7e486 0%, #7fcf62 40%, #6cc055 100%);
+  overflow: hidden;
+}
+.node { background-image: radial-gradient(circle at 32% 24%, rgba(255,255,255,.6), rgba(255,255,255,0) 46%); box-shadow: 0 5px 0 rgba(0,0,0,.25), 0 8px 14px rgba(0,0,0,.18); }
+.node.cleared { border-color: #fff3b0; }
+.node .mons { top: -12px; right: -12px; font-size: 22px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)); }
+.deco.big { font-size: 40px; line-height: 1; filter: drop-shadow(0 4px 0 rgba(0,0,0,.12)); transform-origin: 50% 90%; animation: sway 5s ease-in-out infinite; }
+.deco.flowers { display: flex; gap: 2px; font-size: 22px; line-height: 1; }
+.deco.flowers span { display: inline-block; transform-origin: 50% 100%; animation: sway 3.4s ease-in-out infinite; }
+.deco.bug { font-size: 22px; animation: flit 6s ease-in-out infinite; }
+.deco.hedge { background: radial-gradient(circle at 30% 25%, #6bbf55, #3d8f3a 70%); box-shadow: inset 0 -5px 0 rgba(0,0,0,.15), 0 3px 0 rgba(0,0,0,.18); border-radius: 18px; }
+.cloud { position: absolute; left: -200px; height: 26px; background: rgba(255,255,255,.8); border-radius: 30px; pointer-events: none; animation: drift linear infinite; }
+.cloud::before, .cloud::after { content: ""; position: absolute; background: inherit; border-radius: 50%; }
+.cloud::before { width: 38%; height: 150%; left: 14%; top: -62%; }
+.cloud::after { width: 28%; height: 120%; left: 50%; top: -42%; }
+.wave { position: absolute; width: 70px; text-align: center; pointer-events: none; }
+.wave .fig { display: inline-block; font-size: 42px; line-height: 1; filter: drop-shadow(0 4px 0 rgba(0,0,0,.15)); animation: bob 1.6s ease-in-out infinite; }
+.wave .hand { position: absolute; right: -2px; top: 26px; font-size: 26px; transform-origin: 70% 90%; animation: waving .9s ease-in-out infinite; }
+.wave .bubble { display: block; margin: 0 auto 2px; background: #fff; border-radius: 12px; padding: 3px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 0 rgba(0,0,0,.18); width: max-content; position: relative; left: 50%; transform: translateX(-50%); }
+.wave .bubble::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: #fff; transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+.sign { position: absolute; transform: translateX(-50%); pointer-events: none; }
+.sign b { display: block; background: linear-gradient(#d9a566, #b9803f); color: #fff; font-size: 15px; font-weight: 900; padding: 5px 14px; border-radius: 10px; border: 3px solid #8a5a28; box-shadow: 0 3px 0 rgba(0,0,0,.25); text-shadow: 0 1px 0 rgba(0,0,0,.35); white-space: nowrap; }
+.sign::after { content: ""; display: block; width: 8px; height: 22px; margin: 0 auto; background: #8a5a28; border-radius: 0 0 4px 4px; }
+.sign.done b { background: linear-gradient(#ffe48a, #f2b93a); color: #6b4a00; border-color: #c28a1c; text-shadow: none; }
+@keyframes sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes flit { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(28px, -16px); } 50% { transform: translate(8px, -30px); } 75% { transform: translate(-22px, -10px); } }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(calc(100vw + 400px)); } }
+@keyframes waving { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(22deg); } }
+@media (prefers-reduced-motion: reduce) { .deco, .deco.flowers span, .cloud, .wave .fig, .wave .hand { animation: none; } }

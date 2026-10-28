@@ -1,121 +1,120 @@
-Banor: 108 (100 vanliga, 2 introduktionsbanor, 3 expeditioner och 3 klockbanor)
+Banor: 107 (100 vanliga, 1 introduktionsbanor, 3 expeditioner och 3 klockbanor)
 
 Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ
    1  time     0.00  5x5       12    0          48       0    4.22     11  easy
    2  time     0.00  5x5       15    1          36       0    4.24     18  easy
    3  time     0.16  8x8       28    5          55       0    3.85     30  easy
-   4  monster  0.19  9x9       44    8          44       0    1.85     36  easy
-   5  monster  0.28  11x12     45    3          65       2    1.77     40  mid
+   4  time     0.19  9x9       44    8          44       0    3.77     34  easy
+   5  time     0.28  11x12     45    3          65       2    3.59     38  easy
    6  time     0.00  5x5       14    2          40       0    4.26     19  easy
    7  time     0.41  14x15     53   11          74       3    3.27     49  mid
    8  time     0.10  7x7       38    5          20       0    3.98     25  easy
    9  time     0.20  9x9       59    5          26       0    3.77     29  easy
   10  time     0.58  17x18     57    7          81       4    2.88     48  mid
-  11  monster  0.00  5x5       13    1          44       0    2.00     21  easy
+  11  time     0.00  5x5       13    1          44       0    4.31     19  easy
   12  time     0.17  9x9       42    5          47       0    3.81     31  easy
   13  time     0.63  18x19    121   10          64       4    2.76     60  mid
   14  time     0.80  22x23    175   21          65       6    2.38     82  hard
-  15  monster  0.82  22x23    164   17          67       6    1.35     79  hard
+  15  time     0.82  22x23    164   17          67       6    2.33     78  hard
   16  time     0.10  7x7       27    3          43       0    4.02     24  easy
   17  time     0.74  21x22    148   20          68       5    2.50     78  hard
   18  time     0.43  14x15     69    9          67       3    3.22     48  mid
   19  time     0.34  12x13     69   12          55       2    3.42     48  mid
   20  time     0.98  26x27    181   20          74       7    1.95     85  hard
   21  time     0.27  11x12     49    8          62       2    3.60     42  mid
-  22  monster  0.55  17x18     86   11          72       4    1.56     58  mid
+  22  time     0.55  17x18     86   11          72       4    2.93     57  mid
   23  time     0.85  23x24    103   20          81       6    2.26     74  mid
-  24  monster  0.45  14x15     65   11          69       3    1.64     52  mid
-  25  monster  1.00  26x27    188   19          73       7    1.20     83  hard
-  26  monster  0.43  14x15     82    9          60       3    1.65     50  mid
+  24  time     0.45  14x15     65   11          69       3    3.20     51  mid
+  25  time     1.00  26x27    188   19          73       7    1.90     84  hard
+  26  time     0.43  14x15     82    9          60       3    3.22     49  mid
   27  time     0.95  25x26    183   12          72       7    2.02     75  hard
-  28  monster  0.75  21x22    119   26          74       5    1.40     80  hard
+  28  time     0.75  21x22    119   26          74       5    2.49     80  hard
   29  time     1.00  26x27    210   25          70       7    1.90     91  hard
   30  time     1.00  26x27    150   17          78       7    1.91     80  hard
   31  time     0.60  18x19    111   11          67       4    2.84     60  mid
   32  time     0.84  23x24     98   10          82       6    2.27     62  mid
   33  time     1.00  26x27    287   37          59       7    1.91     88  hard
   34  time     1.00  26x27    213   20          70       7    1.91     85  hard
-  35  monster  1.00  26x27    108   11          84       7    1.20     67  mid
-  36  monster  0.60  18x19    111   21          67       4    1.52     72  mid
+  35  time     1.00  26x27    108   11          84       7    1.91     67  mid
+  36  time     0.60  18x19    111   21          67       4    2.82     71  mid
   37  time     1.00  26x27    215   23          69       7    1.91     89  hard
   38  time     1.00  26x27    302   37          57       7    1.90     88  hard
   39  time     0.97  25x26    169   20          74       7    1.97     85  hard
   40  time     1.00  26x27    133   17          81       7    1.91     77  hard
-  41  monster  0.60  18x19    106   12          69       4    1.52     61  mid
+  41  time     0.60  18x19    106   12          69       4    2.83     60  mid
   42  time     0.71  20x21    101   10          76       5    2.58     60  mid
   43  time     1.00  26x27    130   15          81       7    1.91     75  hard
-  44  monster  1.00  26x27    169   20          76       7    1.20     85  hard
+  44  time     1.00  26x27    169   20          76       7    1.91     85  hard
   45  time     1.00  26x27    200   15          71       7    1.91     79  hard
-  46  monster  0.60  18x19    139   17          59       4    1.52     70  mid
-  47  monster  1.00  26x27    249   35          64       7    1.20     89  hard
-  48  monster  0.71  20x21    108   16          74       5    1.43     68  mid
-  49  monster  0.94  25x26    177   21          73       7    1.25     85  hard
+  46  time     0.60  18x19    139   17          59       4    2.83     69  mid
+  47  time     1.00  26x27    249   35          64       7    1.90     89  hard
+  48  time     0.71  20x21    108   16          74       5    2.57     68  mid
+  49  time     0.94  25x26    177   21          73       7    2.06     85  hard
   50  time     1.00  26x27    158   30          77       7    1.91     90  hard
   51  time     0.60  18x19    161   18          53       4    2.83     72  mid
   52  time     1.00  26x27    145   22          79       7    1.90     85  hard
-  53  monster  1.00  26x27    207   21          70       7    1.20     86  hard
+  53  time     1.00  26x27    207   21          70       7    1.91     86  hard
   54  time     0.84  23x24    153   14          72       6    2.26     74  mid
   55  time     1.00  26x27    245   20          65       7    1.91     84  hard
   56  time     0.60  18x19     72    7          79       4    2.85     50  mid
-  57  monster  1.00  26x27    172   18          75       7    1.20     82  hard
+  57  time     1.00  26x27    172   18          75       7    1.90     83  hard
   58  time     1.00  26x27    154   28          78       7    1.91     90  hard
   59  time     0.62  18x19    112   12          67       4    2.78     61  mid
-  60  monster  1.00  26x27    186   14          73       7    1.20     78  hard
-  61  monster  0.60  18x19    128   12          62       4    1.52     63  mid
+  60  time     1.00  26x27    186   14          73       7    1.91     79  hard
+  61  time     0.60  18x19    128   12          62       4    2.83     62  mid
   62  time     0.89  24x25    147   16          75       6    2.17     76  hard
-  63  monster  1.00  26x27    176   20          75       7    1.20     85  hard
+  63  time     1.00  26x27    176   20          75       7    1.91     85  hard
   64  time     0.99  26x27    148   13          79       7    1.94     75  hard
   65  time     1.00  26x27    230   29          67       7    1.90     90  hard
-  66  monster  0.60  18x19     94   13          72       4    1.52     61  mid
+  66  time     0.60  18x19     94   13          72       4    2.83     60  mid
   67  time     0.88  23x24    128   20          77       6    2.19     78  hard
   68  time     0.75  21x22    162   21          65       5    2.47     81  hard
-  69  monster  1.00  26x27    233   28          67       7    1.20     90  hard
-  70  monster  1.00  26x27    156   22          78       7    1.20     87  hard
+  69  time     1.00  26x27    233   28          67       7    1.90     90  hard
+  70  time     1.00  26x27    156   22          78       7    1.90     87  hard
   71  time     0.60  18x19    102   11          70       4    2.83     59  mid
-  72  monster  1.00  26x27    231   24          67       7    1.20     88  hard
+  72  time     1.00  26x27    231   24          67       7    1.91     89  hard
   73  time     0.79  22x23    176   23          65       6    2.38     84  hard
-  74  monster  0.82  22x23    113   15          77       6    1.34     70  mid
+  74  time     0.82  22x23    113   15          77       6    2.31     69  mid
   75  time     1.00  26x27    383   46          45       7    1.90     85  hard
-  76  monster  0.60  18x19     94   15          72       4    1.52     64  mid
+  76  time     0.60  18x19     94   15          72       4    2.83     63  mid
   77  time     0.79  22x23    133   16          74       6    2.39     73  mid
   78  time     0.67  19x20     76   10          80       5    2.67     56  mid
   79  time     0.75  21x22     88    9          81       5    2.48     57  mid
-  80  monster  1.00  26x27    109   10          84       7    1.20     66  mid
-  81  monster  0.60  18x19     99    4          71       4    1.52     52  mid
+  80  time     1.00  26x27    109   10          84       7    1.90     66  mid
+  81  time     0.60  18x19     99    4          71       4    2.84     51  mid
   82  time     1.00  26x27    138   10          80       7    1.91     70  mid
   83  time     0.80  22x23    135   22          73       6    2.36     80  hard
-  84  monster  1.00  26x27    217   29          69       7    1.20     90  hard
+  84  time     1.00  26x27    217   29          69       7    1.90     91  hard
   85  time     1.00  26x27    178   12          75       7    1.91     76  hard
   86  time     0.60  18x19     98   18          71       4    2.82     66  mid
   87  time     0.77  21x22    259   39          44       5    2.42     81  hard
   88  time     0.78  21x22    112   12          76       5    2.41     65  mid
-  89  monster  1.00  26x27    163   21          77       7    1.20     86  hard
+  89  time     1.00  26x27    163   21          77       7    1.91     86  hard
   90  time     1.00  26x27    133   20          81       7    1.91     81  hard
-  91  monster  0.60  18x19    152   19          55       4    1.52     74  mid
+  91  time     0.60  18x19    152   19          55       4    2.83     73  mid
   92  time     0.86  23x24    106   15          81       6    2.23     69  mid
-  93  monster  1.00  26x27    217   22          69       7    1.20     87  hard
-  94  monster  0.84  23x24    238   28          57       6    1.33     85  hard
-  95  monster  1.00  26x27    179   21          74       7    1.20     86  hard
-  96  monster  0.60  18x19    113   15          67       4    1.52     65  mid
+  93  time     1.00  26x27    217   22          69       7    1.90     87  hard
+  94  time     0.84  23x24    238   28          57       6    2.26     85  hard
+  95  time     1.00  26x27    179   21          74       7    1.91     86  hard
+  96  time     0.60  18x19    113   15          67       4    2.82     65  mid
   97  time     0.97  25x26    146   20          77       7    1.98     82  hard
-  98  monster  0.79  22x23    124   18          75       6    1.37     75  hard
+  98  time     0.79  22x23    124   18          75       6    2.38     75  hard
   99  time     1.00  26x27    130   14          81       7    1.92     74  mid
- 100  monster  1.00  26x27    176   19          75       7    1.20     84  hard
+ 100  time     1.00  26x27    176   19          75       7    1.91     84  hard
 
 Introduktionsbanor:
   1001 Så spelar du: 6x5, väg 13, val 5, betyg 25 (easy)
-  1002 Monster: 7x5, väg 14, val 3, betyg 28 (easy)
 
 Expeditioner:
   2001 Expedition 1 [free]: 12x13 (väg 41, val 7, betyg 38) → 12x13 (väg 49, val 4, betyg 35) → 12x13 (väg 48, val 10, betyg 42)
   2002 Expedition 2 [time]: 16x17 (väg 81, val 18, betyg 68) → 16x17 (väg 121, val 19, betyg 72) → 16x17 (väg 60, val 10, betyg 56) → 16x17 (väg 131, val 23, betyg 78)
-  2003 Expedition 3 [monster]: 22x23 (väg 123, val 22, betyg 81) → 22x23 (väg 165, val 24, betyg 88) → 22x23 (väg 100, val 11, betyg 66) → 22x23 (väg 133, val 18, betyg 78) → 22x23 (väg 111, val 15, betyg 73)
+  2003 Expedition 3 [time]: 22x23 (väg 123, val 22, betyg 82) → 22x23 (väg 165, val 24, betyg 89) → 22x23 (väg 100, val 11, betyg 66) → 22x23 (väg 133, val 18, betyg 79) → 22x23 (väg 111, val 15, betyg 73)
 
 Klockbanor:
   3001 14x15, väg 55, val 12, klockor 4 (avstickare 2/1/6/3), betyg 46
   3002 18x19, väg 68, val 13, klockor 5 (avstickare 2/5/2/4/6), betyg 50
   3003 22x23, väg 169, val 25, klockor 6 (avstickare 1/4/2/5/2/3), betyg 77
 
-Fördelning: lätta 10, medel 40, svåra 50
+Fördelning: lätta 11, medel 39, svåra 50
 
 Alla banor klarade testerna.

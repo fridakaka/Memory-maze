@@ -40,30 +40,4 @@ export const INTRO_LEVELS = [
       { x: 5, y: 2, dirs: ['N'], text: 'Välj den blinkande pilen.', only: true },
     ],
   },
-  {
-    id: 1002,
-    title: 'Monster',
-    width: 7, height: 5,
-    paths: [
-      [[0, 4], [1, 4], [2, 4], [2, 3], [2, 2], [3, 2], [4, 2], [4, 3], [4, 4], [5, 4], [6, 4], [6, 3], [6, 2], [6, 1], [6, 0]],
-      [[2, 2], [2, 1], [1, 1]],
-      [[4, 2], [4, 1], [3, 1]],
-    ],
-    landmarks: [{ type: 'lantern', x: 3, y: 2, dir: 'S' }, { type: 'tree', x: 6, y: 2, dir: 'W' }],
-    spots: [{ x: 1, y: 1, dir: 'E' }],
-    mode: 'memory', kind: 'monster', monsterSpeed: 1.0, delay: 5, studySeconds: 20,
-    steps: [
-      { when: 'study', text: 'Nu kommer ett monster! Det väcks efter en stund och jagar dig. Det är långsammare än du, men tappar du tid kommer det ikapp.' },
-      { when: 'study', text: 'Ser du den orange ringen med en tunna? Det är ett gömställe. Där kan du gömma dig för monstret.' },
-      { when: 'monsterWake', text: 'Monstret är vaket! Skärmkanten blir röd när det är nära. Titta i backspegeln, "Bakom dig", för att se var det är.', hi: 'rear' },
-      { when: 'barrel', text: 'Tryck på "Göm dig i tunnan". Är monstret mer än några rutor bort tappar det bort dig och går och letar. Är det för nära ser det dig.', hi: 'hide' },
-      { when: 'hidden', text: 'Bra! Nu är du trygg i tunnan. Monstret letar efter dig, men hittar dig inte. Vänta tills det har gett upp.', hi: 'unhide' },
-      { when: 'gaveUp', text: 'Monstret gav upp och gick och la sig! Nu kan du komma fram och springa mot målet innan det vaknar.', hi: 'unhide' },
-    ],
-    guides: [
-      { x: 0, y: 4, dirs: ['E'], text: 'Tryck på pilen för att springa.', only: true },
-      { x: 2, y: 2, dirs: ['N', 'E'], text: 'Gå hit till gömstället!', only: true },
-      { x: 1, y: 1, dirs: ['E'], text: 'Tryck på Vänd för att gå tillbaka.', only: true },
-    ],
-  },
 ];

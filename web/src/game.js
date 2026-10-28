@@ -2093,28 +2093,70 @@ function renderMap(scroll = false) {
   }
   d += ` L ${pos[pos.length - 1].x} ${pos[pos.length - 1].y}`;
   let html = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <path d="${d}" fill="none" stroke="#4d6b36" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="${d}" fill="none" stroke="#b9ad98" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="${d}" fill="none" stroke="#d8d0bf" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/>
+    <path d="${d}" fill="none" stroke="#5da64a" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${d}" fill="none" stroke="#f1deaa" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${d}" fill="none" stroke="#ffffff" stroke-opacity=".75" stroke-width="4" stroke-dasharray="1 14" stroke-linecap="round"/>
   </svg>`;
 
-  // Häckar och träd vid sidan om gången
+  // Utsmyckning: molnen glider förbi, blommor och träd står längs gången och figurerna vinkar
+  const CH_DECOR = [
+    { fl: ['🌼', '🌷', '🌸'], big: ['🌳', '🌳', '🌲'], bug: '🐝' },
+    { fl: ['🌻', '🌼', '🌺'], big: ['🌳', '🌴'], bug: '🦋' },
+    { fl: ['🍄', '🌿', '🌱'], big: ['🌲', '🌳'], bug: '🐌' },
+    { fl: ['🍁', '🍂', '🌰'], big: ['🌳', '🍂'], bug: '🐿️' },
+    { fl: ['🌷', '🌸', '💐'], big: ['🌸', '🌳'], bug: '🐞' },
+    { fl: ['❄️', '🌲', '⛄'], big: ['🌲', '🌲'], bug: '🐧' },
+  ];
+  const chFor = (id) => (isIntro(id) ? 0 : isSide(id) ? (chapterOf(sideAfter(id)) ?? 0) : chapterOf(id));
+  for (let c = 0; c < 6; c++) {
+    const y = (H / 6) * c + hash(c + 40) * 200;
+    const w = 90 + hash(c + 50) * 70;
+    html += `<div class="cloud" style="top:${y}px;width:${w}px;animation-duration:${70 + hash(c + 60) * 60}s;animation-delay:-${hash(c + 70) * 100}s"></div>`;
+  }
+  const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
   for (let k = 0; k < total; k++) {
     const p = pos[k];
-    for (let n = 0; n < 2; n++) {
+    const dec = CH_DECOR[chFor(ids[k]) % CH_DECOR.length];
+    for (let n = 0; n < 3; n++) {
       const r = hash((k + 1) * 7 + n);
-      const onRight = p.x < W / 2 ? n === 0 : n === 1;
+      const onRight = p.x < W / 2 ? n !== 1 : n === 1;
       const room = onRight ? W - p.x - 70 : p.x - 70;
-      if (room < 50) continue;
-      const x = onRight ? p.x + 60 + r * (room - 40) : p.x - 60 - r * (room - 40) - 40;
-      const y = p.y - 40 + hash((k + 1) * 13 + n) * 80;
-      if (hash((k + 1) * 3 + n) < 0.5) {
-        html += `<div class="deco hedge" style="left:${x}px;top:${y}px;width:${40 + r * 40}px;height:${22 + r * 8}px"></div>`;
+      if (room < 40) continue;
+      const x = onRight ? p.x + 55 + r * (room - 30) : p.x - 55 - r * (room - 30) - 36;
+      const y = p.y - 50 + hash((k + 1) * 13 + n) * 100;
+      const kind = hash((k + 1) * 3 + n * 11);
+      if (kind < 0.3) {
+        html += `<div class="deco flowers" style="left:${x}px;top:${y}px">${[0, 1, 2].map((i) => `<span style="animation-delay:-${(i * 0.6 + r).toFixed(2)}s">${pick(dec.fl, hash(k * 9 + n * 3 + i))}</span>`).join('')}</div>`;
+      } else if (kind < 0.5) {
+        html += `<div class="deco hedge" style="left:${x}px;top:${y}px;width:${44 + r * 40}px;height:${24 + r * 8}px"></div>`;
+      } else if (kind < 0.82) {
+        html += `<div class="deco big" style="left:${x}px;top:${y - 10}px;font-size:${34 + r * 20}px">${pick(dec.big, r)}</div>`;
       } else {
-        html += `<div class="deco tree" style="left:${x}px;top:${y}px"></div>`;
+        html += `<div class="deco bug" style="left:${x}px;top:${y}px;animation-delay:-${(r * 4).toFixed(2)}s">${dec.bug}</div>`;
       }
     }
   }
+  // Skylt och vinkande figur vid varje kapitelstart
+  const CHEERS = ['Hej!', 'Heja!', 'Kom igen!', 'Du klarar det!', 'Bra jobbat!', 'Härligt!'];
+  ids.forEach((id, k) => {
+    const chNo = chapterOf(id);
+    const isStart = chNo !== null ? (id - 1) % CHAPTER_SIZE === 0 : k === 0;
+    if (!isStart) return;
+    const p = pos[k];
+    const roomy = p.x < W / 2 ? 1 : -1; // åt det håll där det finns mest plats
+    const hero = CHARACTERS[((chNo ?? 0) + k) % CHARACTERS.length];
+    // Första kapitlet har ingen egen figur, introduktionens figur hälsar där
+    if (chNo !== 0) {
+      const fx = Math.min(W - 80, Math.max(26, chNo === null ? p.x + roomy * 95 - 30 : p.x - roomy * 88));
+      html += `<div class="wave" style="left:${fx}px;top:${p.y - 34}px"><span class="bubble">${chNo === null ? 'Välkommen!' : CHEERS[(chNo + 1) % CHEERS.length]}</span>`
+        + `<span class="fig">${hero.emoji}</span><span class="hand">👋</span></div>`;
+    }
+    if (chNo !== null) {
+      const st = chapter(chNo);
+      const sx = Math.min(W - 60, Math.max(60, p.x + roomy * 105));
+      html += `<div class="sign${st.done ? ' done' : ''}" style="left:${sx}px;top:${p.y - 48}px"><b>Kapitel ${chNo + 1}${st.done ? ' ✓' : ''}</b></div>`;
+    }
+  });
 
   const intros = introIds();
   ids.forEach((id, k) => {
@@ -2128,18 +2170,12 @@ function renderMap(scroll = false) {
     const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
     const locked = !unlocked(id);
-    const chNo = chapterOf(id);
-    if (chNo !== null && (id - 1) % CHAPTER_SIZE === 0) {
-      const st = chapter(chNo);
-      html += `<div class="chap-tag${st.done ? ' done' : ''}" style="top:${pos[k].y - 78}px">Kapitel ${chNo + 1}${st.done ? ' ✓' : ''}</div>`;
-    }
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}${!locked && best > 0 ? ' cleared' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
-      + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
       + (isE ? '<span class="mons">🧭</span>' : '')
       + (isC ? '<span class="mons">⏰</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
-      + (locked ? '<span class="lock">🔒</span>' : '')
+      + (locked ? '<span class="lock">🔒</span>' : !isI && !isE && !isC && best > 0 ? '<span class="mons">🌼</span>' : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
       + (locked ? '' : `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span>`) + '</button>';
   });

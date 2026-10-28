@@ -41,7 +41,7 @@ export function levelParams(level) {
   if (level % 5 === 0) offset = 0.35;
   else if (level % 5 === 1 && level > 1) offset = -0.4;
   const d = clamp(trend + offset * amp, 0, 1);
-  const mode = level >= 4 && (level === 4 || rng() < 0.4) ? 'monster' : 'time';
+  const mode = 'time'; // monsterbanorna är borttagna (för komplicerade)
   const size = Math.min(5 + Math.round(d * 21), MAX_SIZE);
   return {
     width: size,
