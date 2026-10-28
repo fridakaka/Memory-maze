@@ -116,8 +116,11 @@ export function generateMaze({ width, height, loops = 0, seed = 1 }) {
     open[y + dy][x + dx][OPPOSITE[d]] = true;
   };
 
-  const seen = new Set([key(0, 0)]);
-  const stack = [[0, 0]];
+  // Börja i en slumpad ruta (inte alltid hörnet), annars får alla banor samma form
+  const ox = Math.floor(rng() * width);
+  const oy = Math.floor(rng() * height);
+  const seen = new Set([key(ox, oy)]);
+  const stack = [[ox, oy]];
   while (stack.length) {
     const [x, y] = stack[stack.length - 1];
     const options = DIRS.filter((d) => {
@@ -153,6 +156,14 @@ export function generateMaze({ width, height, loops = 0, seed = 1 }) {
       } else {
         i++;
       }
+    }
+  }
+
+  // Spegla hälften av banorna höger–vänster så att inget varvriktning blir vanligare än den andra
+  if (rng() < 0.5) {
+    for (const row of open) {
+      row.reverse();
+      for (const c of row) [c.E, c.W] = [c.W, c.E];
     }
   }
 

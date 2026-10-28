@@ -12,6 +12,7 @@ import {
 import { themeIdFor, weatherIdFor } from '../web/src/plan.js';
 import { analyzeLevel } from '../web/src/analysis.js';
 import { INTRO_LEVELS } from './intro-levels.mjs';
+import { decodeMaze } from '../web/src/maze.js';
 import { EXPEDITIONS } from './expeditions.mjs';
 import { CLOCK_LEVELS, START_FACTOR, BONUS_FACTOR } from './clock-levels.mjs';
 
@@ -268,6 +269,25 @@ lines.push('');
 lines.push('Klockbanor:');
 for (const e of entries.filter((x) => x.id >= 3000)) {
   lines.push(`  ${e.id} ${e.width}x${e.height}, väg ${e.metrics.pathLen}, val ${e.metrics.decisions}, klockor ${e.clocks.length} (avstickare ${e.clocks.map((c) => c.detour).join('/')}), betyg ${e.rating}`);
+}
+{
+  // Kontroll: vilket håll vägen till målet svänger. Ska vara ungefär lika många åt båda hållen.
+  const R = { N: 'E', E: 'S', S: 'W', W: 'N' };
+  const dirOf = (p, q) => (q.x > p.x ? 'E' : q.x < p.x ? 'W' : q.y > p.y ? 'S' : 'N');
+  let right = 0;
+  let left = 0;
+  for (const e of entries.filter((x) => x.id <= TOTAL)) {
+    const sol = decodeMaze(e).solution;
+    let net = 0;
+    for (let i = 2; i < sol.length; i++) {
+      const d1 = dirOf(sol[i - 2], sol[i - 1]);
+      const d2 = dirOf(sol[i - 1], sol[i]);
+      if (d1 !== d2) net += R[d1] === d2 ? 1 : -1;
+    }
+    if (net > 0) right++; else if (net < 0) left++;
+  }
+  lines.push('');
+  lines.push(`Varvriktning (vägen till målet): ${right} banor svänger mest åt höger, ${left} mest åt vänster`);
 }
 const byLabel = { easy: 0, mid: 0, hard: 0 };
 for (const e of entries.filter((x) => x.id <= TOTAL)) byLabel[e.label]++;

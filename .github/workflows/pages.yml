@@ -23,6 +23,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Gör att telefoner alltid hämtar den senaste koden (annars kan en gammal version ligga kvar i minnet en stund)
+      - name: Versionsstämpla filer
+        run: |
+          V=${GITHUB_SHA::8}
+          sed -i "s#src/game.js#src/game.js?v=$V#; s#href=\"style.css\"#href=\"style.css?v=$V\"#" web/index.html
+          sed -i "s#from '\./\([a-z]*\)\.js'#from './\1.js?v=$V'#" web/src/*.js
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
