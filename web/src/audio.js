@@ -162,6 +162,20 @@ const SONGS = {
     ],
     lead: 'flute', leadVol: 0.11,
   },
+  disco: {
+    bpm: 120,
+    bars: bars('Am Am Dm Dm Am Am E E'),
+    harp: [], harpVol: 0,
+    bass: ['r', null, 'o', 'r', null, 'f', 'r', 'o'], pad: 0.025, timp: [],
+    kick: [0, 2, 4, 6], hat: [1, 3, 5, 7], clap: [2, 6], stab: [3, 7],
+    melody: [
+      [21, 1], [24, 1], [28, 2], [24, 1], [21, 1], [19, 2], [21, 2], [null, 2], [24, 1], [21, 1], [19, 1], [16, 1],
+      [21, 1], [24, 1], [28, 2], [24, 1], [21, 1], [19, 2], [21, 2], [null, 2], [26, 2], [24, 2],
+      [21, 1], [24, 1], [28, 2], [24, 1], [21, 1], [19, 2], [21, 2], [null, 2], [24, 1], [21, 1], [19, 1], [16, 1],
+      [19, 1], [21, 1], [24, 2], [21, 1], [19, 1], [16, 2], [19, 2], [null, 2], [16, 2], [14, 2],
+    ],
+    lead: 'pluck', leadVol: 0.09,
+  },
   tense: {
     bpm: 132,
     bars: bars('Am Am F E Am Am F E'),
@@ -187,6 +201,10 @@ function compile(song) {
       const bp = song.bass[pos];
       if (bp) events[step].push({ v: 'bass', n: ch.root + (bp === 'f' ? 7 : bp === 'o' ? 12 : 0), vol: 0.16 });
       if (song.timp.includes(pos)) events[step].push({ v: 'timp', vol: 0.22 });
+      if (song.kick?.includes(pos)) events[step].push({ v: 'kick', vol: 0.32 });
+      if (song.hat?.includes(pos)) events[step].push({ v: 'hat', vol: 0.07 });
+      if (song.clap?.includes(pos)) events[step].push({ v: 'clap', vol: 0.14 });
+      if (song.stab?.includes(pos)) events[step].push({ v: 'stab', n: ch.t[0] + 12, n2: ch.t[1] + 12, n3: ch.t[2] + 12, vol: 0.045 });
     }
     if (song.pad) for (const n of [ch.root + 12, ch.t[1] - 12, ch.t[2] - 12]) events[b * 8].push({ v: 'pad', n, len: 8, vol: song.pad });
   });
@@ -332,6 +350,16 @@ export function createAudio() {
     return g;
   }
 
+  let noiseBuf = null;
+  function noiseBuffer() {
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuf;
+  }
+
   function osc(type, f, detune = 0) {
     const o = ctx.createOscillator();
     o.type = type;
@@ -367,6 +395,45 @@ export function createAudio() {
         break;
       case 'pad':
         env(osc('sine', f), t, { vol: e.vol, attack: 0.5, dur: len * 0.98, sustain: true });
+        break;
+      case 'kick': {
+        const o = osc('sine', 150);
+        o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
+        env(o, t, { vol: e.vol, attack: 0.002, dur: 0.22 });
+        break;
+      }
+      case 'hat': {
+        const s = ctx.createBufferSource();
+        s.buffer = noiseBuffer();
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 7000;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(e.vol, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+        s.connect(hp); hp.connect(g); g.connect(musicBus);
+        s.start(t); s.stop(t + 0.1);
+        break;
+      }
+      case 'clap': {
+        const s = ctx.createBufferSource();
+        s.buffer = noiseBuffer();
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1500;
+        bp.Q.value = 0.8;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(e.vol, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        s.connect(bp); bp.connect(g); g.connect(musicBus);
+        s.start(t); s.stop(t + 0.16);
+        break;
+      }
+      case 'stab': // ackordsslag
+        for (const n of [e.n, e.n2, e.n3]) env(osc('sawtooth', note(n)), t, { vol: e.vol, attack: 0.004, dur: 0.2, cutoff: 2200 });
+        break;
+      case 'pluck':
+        env(osc('triangle', f), t, { vol: e.vol, attack: 0.004, dur: 0.32, cutoff: 3000 });
         break;
       case 'bass': // pizzicato
         env(osc('triangle', f), t, { vol: e.vol, attack: 0.006, dur: 0.38, cutoff: 900 });

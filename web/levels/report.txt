@@ -1,4 +1,4 @@
-Banor: 107 (100 vanliga, 1 introduktionsbanor, 3 expeditioner och 3 klockbanor)
+Banor: 110 (100 vanliga, 1 introduktionsbanor, 3 expeditioner och 3 klockbanor och 3 discobanor)
 
 Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ
    1  time     0.00  5x5        6    3          72       3    4.25     28  easy
@@ -116,6 +116,11 @@ Klockbanor:
   3003 22x23, väg 108, val 20, klockor 6 (avstickare 2/3/2/4/2/1), betyg 64
 
 Varvriktning (vägen till målet): 44 banor svänger mest åt höger, 40 mest åt vänster
+
+Discobanor:
+  4001 11x12, väg 28, val 5, betyg 40
+  4002 15x16, väg 33, val 9, betyg 48
+  4003 19x20, väg 113, val 14, betyg 69
 
 Fördelning: lätta 13, medel 53, svåra 34
 

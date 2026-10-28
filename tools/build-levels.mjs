@@ -14,6 +14,7 @@ import { analyzeLevel } from '../web/src/analysis.js';
 import { INTRO_LEVELS } from './intro-levels.mjs';
 import { decodeMaze } from '../web/src/maze.js';
 import { EXPEDITIONS } from './expeditions.mjs';
+import { DISCO_LEVELS } from './disco-levels.mjs';
 import { CLOCK_LEVELS, START_FACTOR, BONUS_FACTOR } from './clock-levels.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'levels');
@@ -235,12 +236,53 @@ for (const cl of CLOCK_LEVELS) {
   });
 }
 
+// ---- Discobanor ----
+for (const dl of DISCO_LEVELS) {
+  let chosen = null;
+  let lastProblems = [];
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
+    const seed = dl.seed + attempt * 100003;
+    const maze = generateMaze({ width: dl.size[0], height: dl.size[1], loops: Math.round(dl.d * 7) + Math.floor(attempt / 4), seed });
+    const landmarks = pickLandmarks(maze, dl.d, seed, []);
+    const result = analyzeLevel(maze, { mode: 'time', d: dl.d });
+    if (wallFollowSolves(maze)) result.problems.push('Håll höger eller vänster räcker för att nå målet');
+    if (maze.solution.length - 1 < Math.round((maze.width + maze.height) * 0.6)) result.problems.push('För kort väg till målet');
+    const key = JSON.stringify(maze.open);
+    if (seenMazes.has(key)) result.problems.push(`Samma bana som ${seenMazes.get(key)}`);
+    if (new Set(landmarks.map((l) => l.type)).size !== landmarks.length) result.problems.push('Samma landmärke två gånger');
+    if (!result.problems.length) {
+      seenMazes.set(key, `discobana ${dl.id}`);
+      chosen = { maze, landmarks, result };
+    } else {
+      lastProblems = result.problems;
+    }
+  }
+  if (!chosen) { failures.push(`Discobana ${dl.id}: ${lastProblems.join('; ')}`); continue; }
+  const { maze, landmarks, result } = chosen;
+  entries.push({
+    id: dl.id,
+    ...encodeMaze(maze),
+    mode: 'time',
+    d: dl.d,
+    theme: 'disco',
+    weather: 'none',
+    spots: [],
+    landmarks,
+    plan: planFor(maze, 'time', dl.d),
+    disco: true,
+    after: dl.after,
+    rating: result.rating,
+    label: result.label,
+    metrics: result.metrics,
+  });
+}
+
 // ---- Skriv resultatet ----
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'levels.json'), JSON.stringify({ version: 1, levels: entries }));
 
 const lines = [];
-lines.push(`Banor: ${entries.length} (${TOTAL} vanliga, ${INTRO_LEVELS.length} introduktionsbanor, ${EXPEDITIONS.length} expeditioner och ${CLOCK_LEVELS.length} klockbanor)`);
+lines.push(`Banor: ${entries.length} (${TOTAL} vanliga, ${INTRO_LEVELS.length} introduktionsbanor, ${EXPEDITIONS.length} expeditioner och ${CLOCK_LEVELS.length} klockbanor och ${DISCO_LEVELS.length} discobanor)`);
 lines.push('');
 lines.push('Bana  Läge     d     Storlek  Väg  Val  Sidogångar%  Loopar  Margin  Betyg  Typ');
 let prev = 0;
@@ -267,7 +309,7 @@ for (const e of entries.filter((x) => x.id >= 2000 && x.id < 3000)) {
 }
 lines.push('');
 lines.push('Klockbanor:');
-for (const e of entries.filter((x) => x.id >= 3000)) {
+for (const e of entries.filter((x) => x.id >= 3000 && x.id < 4000)) {
   lines.push(`  ${e.id} ${e.width}x${e.height}, väg ${e.metrics.pathLen}, val ${e.metrics.decisions}, klockor ${e.clocks.length} (avstickare ${e.clocks.map((c) => c.detour).join('/')}), betyg ${e.rating}`);
 }
 {
@@ -288,6 +330,11 @@ for (const e of entries.filter((x) => x.id >= 3000)) {
   }
   lines.push('');
   lines.push(`Varvriktning (vägen till målet): ${right} banor svänger mest åt höger, ${left} mest åt vänster`);
+}
+lines.push('');
+lines.push('Discobanor:');
+for (const e of entries.filter((x) => x.id >= 4000)) {
+  lines.push(`  ${e.id} ${e.width}x${e.height}, väg ${e.metrics.pathLen}, val ${e.metrics.decisions}, betyg ${e.rating}`);
 }
 const byLabel = { easy: 0, mid: 0, hard: 0 };
 for (const e of entries.filter((x) => x.id <= TOTAL)) byLabel[e.label]++;

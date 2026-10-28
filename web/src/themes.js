@@ -1041,6 +1041,118 @@ const forestFloor = (ctx, n) => {
   }
 };
 
+// ---------- Disco ----------
+const NEON = ['#ff3fa4', '#35e6ff', '#ffe14a', '#7dff6a', '#b06bff'];
+
+/** Spegelplattor med neonlister. glow = bara de lysande delarna (färgas om i spelet). */
+const discoWall = (glow) => (ctx, n) => {
+  if (!glow) {
+    const g = ctx.createLinearGradient(0, 0, 0, n);
+    g.addColorStop(0, '#2a1450');
+    g.addColorStop(1, '#14082e');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, n, n);
+    // spegelrutor
+    const t = n / 8;
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        const v = 0.04 + rnd() * 0.12;
+        ctx.fillStyle = `rgba(255,255,255,${v})`;
+        ctx.fillRect(x * t + 1.5, y * t + 1.5, t - 3, t - 3);
+      }
+    }
+    // gnistrar
+    for (let i = 0; i < 24; i++) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      const x = rnd() * n;
+      const y = rnd() * n;
+      ctx.fillRect(x - 1, y - 4, 2, 8);
+      ctx.fillRect(x - 4, y - 1, 8, 2);
+    }
+    return;
+  }
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, n, n);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  for (const y of [n * 0.16, n * 0.84]) { ctx.beginPath(); ctx.moveTo(6, y); ctx.lineTo(n - 6, y); ctx.stroke(); }
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(6, n * 0.5); ctx.lineTo(n * 0.35, n * 0.5); ctx.moveTo(n * 0.65, n * 0.5); ctx.lineTo(n - 6, n * 0.5); ctx.stroke();
+  // en stjärna i mitten
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? n * 0.06 : n * 0.13;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    ctx.lineTo(n / 2 + r * Math.cos(a), n * 0.5 + r * Math.sin(a));
+  }
+  ctx.fill();
+};
+
+const discoTop = (ctx, n) => {
+  speckle(ctx, n, '#1b0d3a', ['#2a1450', '#341a66', '#120828'], 400, 3, 9);
+  for (let i = 0; i < 20; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillRect(rnd() * n, rnd() * n, 2, 2);
+  }
+};
+
+/** Dansgolv: fyra gånger fyra färgade rutor. glow 0 och 1 är två mönster som blinkar i takt. */
+const discoFloor = (glow) => (ctx, n) => {
+  const cells = 4;
+  const s = n / cells;
+  const dark = ['#3a1a5a', '#143a6a', '#5a1a48', '#13555a'];
+  if (glow === false) {
+    ctx.fillStyle = '#0c0620';
+    ctx.fillRect(0, 0, n, n);
+    for (let y = 0; y < cells; y++) {
+      for (let x = 0; x < cells; x++) {
+        ctx.fillStyle = dark[(x + y * 2) % 4];
+        ctx.fillRect(x * s + 3, y * s + 3, s - 6, s - 6);
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x * s + 3, y * s + 3, s - 6, 4);
+      }
+    }
+    return;
+  }
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, n, n);
+  for (let y = 0; y < cells; y++) {
+    for (let x = 0; x < cells; x++) {
+      if ((x + y) % 2 !== glow) continue;
+      ctx.fillStyle = NEON[(x * 3 + y * 2 + glow) % NEON.length];
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(x * s + 5, y * s + 5, s - 10, s - 10);
+      ctx.globalAlpha = 1;
+    }
+  }
+};
+
+/** Natthimmel med ljusstrålar. */
+const discoSky = (ctx, w, h) => {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#08041a');
+  g.addColorStop(0.6, '#1a0a3a');
+  g.addColorStop(1, '#3a1260');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) {
+    const x = (i + 0.5) * (w / 6);
+    const grad = ctx.createLinearGradient(x, 0, x + (i % 2 ? 60 : -60), h);
+    grad.addColorStop(0, NEON[i % NEON.length] + 'aa');
+    grad.addColorStop(1, NEON[i % NEON.length] + '00');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x + (i % 2 ? 90 : -90) + 24, h); ctx.lineTo(x + (i % 2 ? 90 : -90) - 24, h);
+    ctx.fill();
+  }
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + rnd() * 0.6})`;
+    ctx.fillRect(rnd() * w, rnd() * h * 0.8, 2, 2);
+  }
+};
+
 /**
  * Teman. `side` och `top` ritar väggarna, `floor` golvet och `sky` bakgrunden
  * i spelvyn. `ground` är färgen runt labyrinten på kartan, `fog` dimman.
@@ -1059,6 +1171,7 @@ export const THEMES = [
   { id: 'aquarium', noWeather: true, name: 'Akvarium', fx: 'bubbles', fish: true, fogRange: [5, 15], hemi: 1.15, hemiColor: 0xd6f6ff, side: aquaWall, top: aquaTop, floor: aquaFloor, ground: 0x2a9bbf, fog: 0x8fe0ee, skyDraw: aquaSky, sky: ['#2aa6d0', '#6fd3e8', '#bff2f6'] },
   { id: 'forest', name: 'Skog', birds: true, fogRange: [6, 16], side: forestWall, top: forestTop, floor: forestFloor, ground: 0x4f7a3a, fog: 0xdff0d8, sky: ['#6fb6f0', '#b7defa', '#eaf6ff'] },
   { id: 'stone', name: 'Stenmur', side: stone, top: flat('#7d8185', ['#6f7377', '#8c8f92']), floor: flagstone, ground: 0x555b52, fog: 0xd6dad6, sky: ['#a9b8c4', '#cdd5da', '#e3e6e5'] },
+  { id: 'disco', noWeather: true, name: 'Disco', disco: true, fogRange: [5, 14], hemi: 0.95, hemiColor: 0xc4a8ff, sunColor: 0xffd0ff, side: discoWall(false), glow: discoWall(true), top: discoTop, floor: discoFloor(false), floorGlow: discoFloor(0), floorGlow2: discoFloor(1), ground: 0x120a24, fog: 0x1a0f2e, skyDraw: discoSky, sky: ['#08041a', '#1a0a3a', '#3a1260'] },
 ];
 
 /** Tema för en bana (id kommer från planeringen, eller direkt från banans data). */
@@ -1079,6 +1192,7 @@ export function getAssets(theme, aspect = 2) {
       sky: canvasTex(skySize, theme.skyDraw ?? sky(top, mid, bottom), { clamp: true }),
       glow: theme.glow ? canvasTex(theme.texSize ?? 256, theme.glow) : null,
       floorGlow: theme.floorGlow ? canvasTex(256, theme.floorGlow) : null,
+      floorGlow2: theme.floorGlow2 ? canvasTex(256, theme.floorGlow2) : null,
     };
   }
   return theme.assets;

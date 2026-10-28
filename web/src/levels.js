@@ -29,7 +29,8 @@ export async function loadLevelData() {
 
 export const isIntro = (id) => id > 1000 && id < 2000;
 export const isExpedition = (id) => id >= 2000 && id < 3000;
-export const isClock = (id) => id >= 3000;
+export const isClock = (id) => id >= 3000 && id < 4000;
+export const isDisco = (id) => id >= 4000;
 
 /** Nummer på introduktionsbanorna i ordning. */
 export function introIds() {
@@ -44,6 +45,11 @@ export function expeditionIds() {
 /** Klockbanorna i ordning. */
 export function clockIds() {
   return [...store.keys()].filter(isClock).sort((a, b) => a - b);
+}
+
+/** Discobanorna i ordning. */
+export function discoIds() {
+  return [...store.keys()].filter(isDisco).sort((a, b) => a - b);
 }
 
 /** Antal vanliga banor i datan (minst 60 även utan data). */
@@ -61,6 +67,7 @@ export function levelInfo(id) {
       themeId: data.theme, weatherId: data.weather, label: data.label ?? null,
       rating: data.rating ?? null, intro: data.intro ?? null, fromData: true,
       clock: data.clocks ? { after: data.after, clocks: data.clocks.length } : null,
+      disco: data.disco ? { after: data.after } : null,
       expedition: data.expedition ? { title: data.expedition.title, after: data.expedition.after, legs: data.expedition.legs.length } : null,
     };
   }
@@ -68,7 +75,7 @@ export function levelInfo(id) {
   const themeId = themeIdFor(id);
   return {
     id, width: p.width, height: p.height, mode: p.mode, d: p.d,
-    themeId, weatherId: weatherIdFor(id, themeId), label: null, rating: null, intro: null, fromData: false, expedition: null, clock: null,
+    themeId, weatherId: weatherIdFor(id, themeId), label: null, rating: null, intro: null, fromData: false, expedition: null, clock: null, disco: null,
   };
 }
 

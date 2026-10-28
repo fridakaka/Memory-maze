@@ -8,7 +8,7 @@ import {
 } from './maze.js';
 import { createAudio } from './audio.js';
 import { VERSION, FEEDBACK_URL } from './config.js';
-import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, clockIds, loadLevelData, isIntro } from './levels.js';
+import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, clockIds, discoIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
 const $ = (id) => document.getElementById(id);
@@ -826,6 +826,74 @@ function updateBirds(dt) {
   }
 }
 
+// ---------- Disco: spegelkula, ljusstrålar och blinkande dansgolv ----------
+let discoGroup = null;
+
+function clearDisco() {
+  if (!discoGroup) return;
+  scene.remove(discoGroup);
+  discoGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  discoGroup = null;
+}
+
+function makeDiscoGroup() {
+  clearDisco();
+  discoGroup = new THREE.Group();
+  const ball = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.75, 2),
+    new THREE.MeshPhongMaterial({ color: 0xdddde8, shininess: 140, specular: 0xffffff, flatShading: true, emissive: 0x222233 }));
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 3, 6), new THREE.MeshBasicMaterial({ color: 0xaaaaaa }));
+  cord.position.y = 1.8;
+  ball.add(cord);
+  discoGroup.add(ball);
+  const beams = [];
+  for (let i = 0; i < 4; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.85, 6, 20, 1, true), mat);
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2;
+    discoGroup.add(cone, pool);
+    beams.push({ cone, pool, ph: (i / 4) * TAU, r: 1.8 + i * 0.9 });
+  }
+  discoGroup.userData = { ball, beams, t: 0, beat: -1 };
+  discoGroup.visible = false;
+  scene.add(discoGroup);
+}
+
+function updateDisco(dt) {
+  if (!discoGroup) return;
+  discoGroup.visible = S.phase === 'play' || S.phase === 'ended';
+  const ud = discoGroup.userData;
+  if (!discoGroup.visible) return;
+  ud.t += dt;
+  const t = ud.t;
+  const fx = Math.sin(S.camYaw);
+  const fz = Math.cos(S.camYaw);
+  ud.ball.position.set(hero.position.x + fx * 6, 2.9 + Math.sin(t * 1.5) * 0.1, hero.position.z + fz * 6);
+  ud.ball.rotation.y += dt * 1.2;
+  const hue = (t * 0.12) % 1;
+  for (const [i, b] of ud.beams.entries()) {
+    const a = t * (0.5 + i * 0.12) + b.ph;
+    const x = hero.position.x + fx * 3 + Math.cos(a) * b.r;
+    const z = hero.position.z + fz * 3 + Math.sin(a * 1.3) * b.r;
+    b.cone.position.set(x, 3, z);
+    b.pool.position.set(x, 0.04, z);
+    const col = new THREE.Color().setHSL((hue + i * 0.22) % 1, 1, 0.55);
+    b.cone.material.color.copy(col);
+    b.pool.material.color.copy(col);
+  }
+  // Neonlisterna på väggarna byter färg, och dansgolvets rutor blinkar i takt (120 slag per minut)
+  const wallCol = new THREE.Color().setHSL(hue, 1, 0.5);
+  mats.wallSide.emissive.copy(wallCol);
+  if (ghostSides) ghostSides.material.emissive.copy(wallCol);
+  const beat = Math.floor(t * 2) % 2;
+  if (beat !== ud.beat) {
+    ud.beat = beat;
+    const a = getAssets(theme, window.innerHeight / window.innerWidth);
+    mats.floor.emissiveMap = beat ? a.floorGlow2 : a.floorGlow;
+  }
+}
+
 function clearFx() {
   if (!fx) return;
   scene.remove(fx.obj);
@@ -945,6 +1013,7 @@ function applyWeather(w) {
   makeFx(w.fx ?? theme.fx);
   if (theme.fish) { if (!fishGroup) makeFishGroup(); } else clearFish();
   if (theme.birds) { if (!birdGroup) makeBirdGroup(); } else clearBirds();
+  if (theme.disco) { if (!discoGroup) makeDiscoGroup(); } else clearDisco();
   setAccessory(hero, w.id);
   setHelmet(hero, theme.id === 'space');
   attachFlash(w.id === 'night');
@@ -1082,7 +1151,7 @@ function startLevel(leg = 0, carry = null) {
   S.mapZoom = 1; S.mapPanX = 0; S.mapPanZ = 0; S.lookYaw = 0; S.mapPitch = 1.05;
   fitMapCamera();
   S.phase = 'study';
-  audio.setMusic('study');
+  audio.setMusic(theme.disco ? 'disco' : 'study');
 
   show($('menu'), false);
   show($('result'), false);
@@ -1096,7 +1165,9 @@ function startLevel(leg = 0, carry = null) {
   const wIcon = weather.emoji ? ` ${weather.emoji}` : '';
   const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}`
     : S.exp ? `${S.exp.title} · del ${S.exp.leg + 1}/${S.exp.legs}`
-      : clockIds().includes(level) ? `Klockbana ${clockIds().indexOf(level) + 1}` : `Bana ${level}`;
+      : clockIds().includes(level) ? `Klockbana ${clockIds().indexOf(level) + 1}`
+        : discoIds().includes(level) ? `Disco ×2 🪩` : `Bana ${level}`;
+  S.disco = !!theme.disco;
   S.hudBase = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   $('hud-level').textContent = S.hudBase;
   show($('danger'), false);
@@ -1118,7 +1189,7 @@ function startLevel(leg = 0, carry = null) {
 function beginPlay() {
   S.phase = 'play';
   audio.play('start');
-  audio.setMusic('play');
+  audio.setMusic(theme.disco ? 'disco' : 'play');
   pathGroup.visible = false;
   mapIcons.visible = false;
   scene.fog = new THREE.Fog(fogSetting[0], fogSetting[1], fogSetting[2]);
@@ -1883,7 +1954,7 @@ function finish(win, reason = 'time') {
   let stars = 0;
   S.won = win;
   if (win) {
-    stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit });
+    stars = starsFor({ wrongTurns: S.wrongTurns, timeUsed: used, limit: S.limit }) * (S.disco ? 2 : 1);
     save.stars[key] = Math.max(save.stars[key] || 0, stars);
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
   }
@@ -1903,10 +1974,10 @@ function finish(win, reason = 'time') {
 
   setTimeout(() => {
     $('res-title').textContent = win ? 'Du hittade ut!' : reason === 'monster' ? 'Monstret hann ikapp dig' : 'Tiden tog slut';
-    $('res-stars').innerHTML = [0, 1, 2]
+    $('res-stars').innerHTML = (S.disco ? [0, 1, 2, 3, 4, 5] : [0, 1, 2])
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
-      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${chapterMsg || (firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : '')}`
+      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${S.disco ? ' · dubbla poäng! 🪩' : ''}${chapterMsg || (firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : '')}`
       : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
         : lost?.restarted ? `Slut på liv! Kapitel ${lost.c + 1} börjar om från bana ${lost.from}. Dina stjärnor och klarade banor ligger kvar.`
           : lost ? `Du har ${lost.lives} liv kvar i kapitlet.`
@@ -2110,6 +2181,7 @@ function frame(now) {
     updateFx(dt);
     updateFish(dt);
     updateBirds(dt);
+    updateDisco(dt);
     beam.visible = weather.id === 'night' && (S.phase === 'play' || S.phase === 'ended');
     renderer.render(scene, camera);
     if (S.phase === 'play' && S.kind === 'monster' && !S.peek) renderRear();
@@ -2125,6 +2197,7 @@ function levelOrder() {
   const exps = [
     ...expeditionIds().map((id) => ({ id, after: levelInfo(id).expedition?.after ?? n })),
     ...clockIds().map((id) => ({ id, after: levelInfo(id).clock?.after ?? n })),
+    ...discoIds().map((id) => ({ id, after: levelInfo(id).disco?.after ?? n })),
   ];
   for (let l = 1; l <= n; l++) {
     ids.push(l);
@@ -2135,9 +2208,9 @@ function levelOrder() {
 }
 
 // ---------- Progression: man måste klara en bana för att kunna spela nästa ----------
-const isSide = (id) => expeditionIds().includes(id) || clockIds().includes(id);
+const isSide = (id) => expeditionIds().includes(id) || clockIds().includes(id) || discoIds().includes(id);
 const mainPath = () => levelOrder().filter((id) => !isSide(id));
-const sideAfter = (id) => { const p = levelInfo(id); return p.expedition?.after ?? p.clock?.after ?? null; };
+const sideAfter = (id) => { const p = levelInfo(id); return p.expedition?.after ?? p.clock?.after ?? p.disco?.after ?? null; };
 
 function cleared(id) {
   if (isIntro(id)) return !!save.intro?.[id] || bestStars(id) > 0;
@@ -2240,6 +2313,7 @@ function registerClear(id) {
 
 function livesText(id) {
   if (isIntro(id)) return '🎓 övning';
+  if (discoIds().includes(id)) return '🪩 dubbla poäng';
   if (isSide(id)) return '⭐ bonusbana';
   const info = lifeInfoFor(id);
   if (!info) return '🔁 övning';
@@ -2262,6 +2336,7 @@ function levelType(level) {
   if (p.intro) return { key: 'intro', label: 'Introduktion', p };
   if (p.expedition) return { key: 'expedition', label: 'Expedition', p };
   if (p.clock) return { key: 'clock', label: 'Klockbana', p };
+  if (p.disco) return { key: 'disco', label: 'Discobana', p };
   if (monsterAllowed(level)) return { key: 'monster', label: 'Monster', p };
   if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
   const band = p.label ?? (p.d < 0.35 ? 'easy' : p.d < 0.65 ? 'mid' : 'hard');
@@ -2277,8 +2352,9 @@ function bestStars(level) {
 }
 
 function totalStars() {
+  // Alla banor utom introduktionen räknas, även bonusbanorna (discobanorna ger dubbla stjärnor)
   let sum = 0;
-  for (let l = 1; l <= levelCount(); l++) sum += bestStars(l);
+  for (const id of levelOrder()) if (!isIntro(id)) sum += bestStars(id);
   return sum;
 }
 
@@ -2386,18 +2462,20 @@ function renderMap(scroll = false) {
     const exps = expeditionIds();
     const isE = t.key === 'expedition';
     const isC = t.key === 'clock';
-    const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : id;
+    const isD = t.key === 'disco';
+    const number = isI ? intros.indexOf(id) + 1 : isE ? `E${exps.indexOf(id) + 1}` : isC ? `K${clockIds().indexOf(id) + 1}` : isD ? `D${discoIds().indexOf(id) + 1}` : id;
     const done = isI && save.intro?.[id];
     const locked = !unlocked(id);
-    html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}${!locked && best > 0 ? ' cleared' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
+    html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}${!locked && best > 0 ? ' cleared' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : isD ? `Discobana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
       + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
       + (isE ? '<span class="mons">🧭</span>' : '')
       + (isC ? '<span class="mons">⏰</span>' : '')
+      + (isD ? '<span class="mons">🪩</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
       + (locked ? '<span class="lock">🔒</span>' : !isI && !isE && !isC && best > 0 ? '<span class="mons">🌼</span>' : '')
       + (sel ? `<span class="me">${heroEmoji()}</span>` : '')
-      + (locked ? '' : `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(3 - best)}</span></span>`) + '</button>';
+      + (locked ? '' : `<span class="st">${'★'.repeat(best)}<span class="off">${'★'.repeat(Math.max(0, (isD ? 6 : 3) - best))}</span></span>`) + '</button>';
   });
   inner.innerHTML = html;
   if (scroll) {
@@ -2421,6 +2499,10 @@ function refreshMenu(scroll = false) {
     const n = introIds().indexOf(settings.level) + 1;
     $('lvl-info').textContent = `Introduktion ${n}: ${t.p.intro.title} · ${t.p.width}×${t.p.height} rutor`;
     $('play').textContent = `Spela introduktion ${n}`;
+  } else if (t.p.disco) {
+    const n = discoIds().indexOf(settings.level) + 1;
+    $('lvl-info').textContent = `Discobana ${n} · Dubbla poäng! 🪩 · ${t.p.width}×${t.p.height} rutor`;
+    $('play').textContent = `Spela discobana ${n}`;
   } else if (t.p.clock) {
     const n = clockIds().indexOf(settings.level) + 1;
     $('lvl-info').textContent = `Klockbana ${n} · ${th.name} · ${t.p.width}×${t.p.height} rutor · tiden är kort, plocka ${t.p.clock.clocks} klockor`;
