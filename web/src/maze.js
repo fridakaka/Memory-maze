@@ -53,6 +53,13 @@ export function levelParams(level) {
   };
 }
 
+/** Banor som blir monsterbanor när tillvalet Monster är på (samma urval som förut: var tredje till var femte bana). */
+export function monsterLevelFor(level) {
+  const rng = mulberry32(level * 104729 + 7);
+  rng();
+  return level >= 4 && (level === 4 || rng() < 0.4);
+}
+
 /** Sant om en 2x2-ruta har alla fyra inre väggar öppna. */
 function squareIsOpen(open, x, y) {
   if (x < 0 || y < 0 || y + 1 >= open.length || x + 1 >= open[0].length) return false;

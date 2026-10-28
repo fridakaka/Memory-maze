@@ -3,7 +3,7 @@ import { CHARACTERS, makeHero, setAccessory, setHelmet } from './heroes.js';
 import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
-  DIRS, DELTA, OPPOSITE, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
+  DIRS, DELTA, OPPOSITE, monsterLevelFor, pickHidingSpots, distances, monsterPlan, walkCorridor, openDirs, relativeDir,
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 import { createAudio } from './audio.js';
@@ -874,7 +874,14 @@ function startLevel(leg = 0, carry = null) {
   const dbgSize = Math.round(Number($('dbg-size').value)) || 0;
   const L = buildLevel(level, dbgSize ? Math.max(4, Math.min(40, dbgSize)) : 0, leg);
   maze = L.maze;
+  if (!L.intro && !L.expedition && monsterAllowed(level) && L.mode === 'time') {
+    L.mode = 'monster';
+    L.plan = null;
+    const lm = maze.landmarks ?? [];
+    maze.spots = pickHidingSpots(maze, level * 7919 + 17).filter((sp) => !lm.some((l) => l.x === sp.x && l.y === sp.y));
+  }
   S.intro = L.intro;
+  S.monsterTips = L.mode === 'monster' && !save.seenMonsterTips;
   S.exp = L.expedition;
   S.peek = false;
   show($('peek-close'), false);
@@ -1047,6 +1054,18 @@ function availableRel() {
   return rels;
 }
 
+// ---------- Monster (tillval) ----------
+// Med tillvalet Monster blir en del banor monsterbanor: ett monster jagar och man kan gömma sig i tunnor.
+const monsterAllowed = (id) => !!save.monsters && !isIntro(id) && !isSide(id) && monsterLevelFor(id);
+const MONSTER_TIPS = [
+  { when: 'study', text: 'Nu kommer ett monster! Det väcks efter en stund och jagar dig. Det är långsammare än du, men tappar du tid kommer det ikapp.' },
+  { when: 'study', text: 'Ser du den orange ringen med en tunna? Det är ett gömställe. Där kan du gömma dig för monstret.' },
+  { when: 'monsterWake', text: 'Monstret är vaket! Skärmkanten blir röd när det är nära. Titta i backspegeln, "Bakom dig", för att se var det är.', hi: 'rear' },
+  { when: 'barrel', text: 'Tryck på "Göm dig i tunnan". Är monstret mer än några rutor bort tappar det bort dig och går och letar. Är det för nära ser det dig.', hi: 'hide' },
+  { when: 'hidden', text: 'Bra! Nu är du trygg i tunnan. Monstret letar efter dig, men hittar dig inte. Vänta tills det har gett upp.', hi: 'unhide' },
+  { when: 'gaveUp', text: 'Monstret gav upp och gick och la sig! Nu kan du komma fram och springa mot målet.', hi: 'unhide' },
+];
+
 // ---------- Förklaringar (introduktionsbanorna) ----------
 const HIGHLIGHT = {
   ready: '#ready', controls: '#controls', back: '#controls [data-rel="back"]', compass: '#compass',
@@ -1090,8 +1109,9 @@ $('dialog-secondary').onclick = () => closeDialog('secondary');
 
 /** Köar förklaringar som hör till ett tillfälle och visar dem en i taget. */
 function coach(when) {
-  if (!S.intro) return;
-  S.intro.steps.forEach((step, i) => {
+  const steps = S.intro?.steps ?? (S.monsterTips ? MONSTER_TIPS : null);
+  if (!steps) return;
+  steps.forEach((step, i) => {
     if (step.when === when && !S.coachDone.has(i)) {
       S.coachDone.add(i);
       S.coachQueue.push(step);
@@ -1103,7 +1123,7 @@ function coach(when) {
 function nextCoach() {
   if (dialogHandlers || !S.coachQueue.length) return;
   const step = S.coachQueue.shift();
-  showDialog({ title: S.intro.title, text: step.text, hi: step.hi, onPrimary: nextCoach });
+  showDialog({ title: S.intro?.title ?? 'Monster', text: step.text, hi: step.hi, onPrimary: nextCoach });
 }
 
 /** Vid en korsning kan banan peka ut vilken pil man ska trycka på. */
@@ -1730,6 +1750,7 @@ function updateCompass() {
 // ---------- Slut ----------
 function finish(win, reason = 'time') {
   closePeek();
+  if (S.monsterTips) { save.seenMonsterTips = true; S.monsterTips = false; }
   S.phase = 'ended';
   audio.setMusic(null);
   audio.heartbeat(0);
@@ -2134,6 +2155,7 @@ function levelType(level) {
   if (p.intro) return { key: 'intro', label: 'Introduktion', p };
   if (p.expedition) return { key: 'expedition', label: 'Expedition', p };
   if (p.clock) return { key: 'clock', label: 'Klockbana', p };
+  if (monsterAllowed(level)) return { key: 'monster', label: 'Monster', p };
   if (p.mode === 'monster') return { key: 'monster', label: 'Monster', p };
   const band = p.label ?? (p.d < 0.35 ? 'easy' : p.d < 0.65 ? 'mid' : 'hard');
   return { key: band, label: { easy: 'Lätt', mid: 'Medel', hard: 'Svår' }[band], p };
@@ -2262,6 +2284,7 @@ function renderMap(scroll = false) {
     const locked = !unlocked(id);
     html += `<button class="node ${t.key}${sel ? ' sel' : ''}${locked ? ' locked' : ''}${!locked && best > 0 ? ' cleared' : ''}" data-level="${id}" style="left:${pos[k].x}px;top:${pos[k].y}px" aria-label="${isI ? `Introduktion ${number}` : isE ? t.p.expedition.title : isC ? `Klockbana ${number}` : `Bana ${id}`}, ${t.label}">`
       + `${number}`
+      + (t.key === 'monster' ? '<span class="mons">👾</span>' : '')
       + (isE ? '<span class="mons">🧭</span>' : '')
       + (isC ? '<span class="mons">⏰</span>' : '')
       + (isI ? `<span class="mons">${done ? '✅' : '🎓'}</span>` : '')
@@ -2349,6 +2372,8 @@ $('hero-close').onclick = () => show($('sheet-hero'), false);
 $('settings-btn').onclick = () => show($('sheet-settings'));
 $('settings-close').onclick = () => { show($('sheet-settings'), false); refreshMenu(); };
 
+$('opt-monsters').checked = !!save.monsters;
+$('opt-monsters').onchange = () => { save.monsters = $('opt-monsters').checked; writeSave(); refreshMenu(); };
 $('snd-sfx').checked = save.sfx !== false;
 $('snd-music').checked = save.music !== false;
 $('snd-sfx').onchange = () => { save.sfx = $('snd-sfx').checked; writeSave(); audio.setEnabled({ sfx: save.sfx }); };
