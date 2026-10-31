@@ -1300,7 +1300,15 @@ function coach(when) {
 function nextCoach() {
   if (dialogHandlers || !S.coachQueue.length) return;
   const step = S.coachQueue.shift();
-  showDialog({ title: S.intro?.title ?? 'Monster', text: step.text, hi: step.hi, onPrimary: nextCoach });
+  showDialog({
+    title: S.intro?.title ?? 'Monster',
+    text: step.text,
+    hi: step.hi,
+    onPrimary: nextCoach,
+    // I introduktionen kan man alltid hoppa över hela den
+    secondary: S.intro ? 'Hoppa över introduktionen' : null,
+    onSecondary: S.intro ? () => skipIntro(nextCoach) : null,
+  });
 }
 
 /** Vid en korsning kan banan peka ut vilken pil man ska trycka på. */
@@ -2486,6 +2494,7 @@ function renderMap(scroll = false) {
 
 function refreshMenu(scroll = false) {
   if (!unlocked(settings.level)) settings.level = frontier();
+  show($('skip-intro'), isIntro(settings.level) && !cleared(settings.level));
   $('stat-stars').textContent = `★ ${totalStars()}`;
   const lifeLevel = settings.level;
   const info = lifeInfoFor(lifeLevel);
@@ -2529,8 +2538,29 @@ $('map-inner').addEventListener('click', (e) => {
   settings.level = id;
   save.level = settings.level;
   writeSave();
-  refreshMenu();
+  // Ett tryck på banan startar den direkt
+  startLevel();
 });
+
+/** Hoppa över introduktionen (frågar först). Den räknas som klar utan stjärnor och kan spelas om senare. */
+function skipIntro(onCancel = null) {
+  showDialog({
+    title: 'Hoppa över introduktionen?',
+    text: 'Då hoppar du direkt till kapitel 1. Du kan spela introduktionen senare från kartan.',
+    primary: 'Hoppa över',
+    secondary: 'Avbryt',
+    onSecondary: onCancel,
+    onPrimary: () => {
+      save.intro = save.intro ?? {};
+      for (const id of introIds()) save.intro[id] = true;
+      settings.level = frontier();
+      save.level = settings.level;
+      writeSave();
+      backToMenu();
+    },
+  });
+}
+$('skip-intro').onclick = skipIntro;
 
 function renderHeroes(message) {
   const total = totalStars();

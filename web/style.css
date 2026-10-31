@@ -363,3 +363,5 @@ textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; b
 
 .node.disco { background-color: #b44be0; }
 .node.disco.cleared { border-color: #ffe27a; }
+
+#skip-intro { width: 100%; margin-bottom: 8px; background: #f7e1b8; }
