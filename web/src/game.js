@@ -1367,8 +1367,11 @@ function refreshControls() {
   for (const btn of document.querySelectorAll('#controls button[data-rel]')) {
     const rel = btn.dataset.rel;
     const locked = S.guide?.only && S.guide.rel !== rel;
-    btn.disabled = S.phase !== 'play' || S.run !== null || S.hidden || !(rel in rels) || !!locked;
-    btn.classList.toggle('guide', !!S.guide && S.guide.rel === rel && !btn.disabled);
+    // Under löpning kan man bara vända tillbaka (en gång), till exempel om man tryckte fel
+    const running = S.run !== null;
+    const backOk = running && rel === 'back' && !S.run.reversed;
+    btn.disabled = S.phase !== 'play' || S.hidden || (running ? !backOk : (!(rel in rels) || !!locked));
+    btn.classList.toggle('guide', !running && !!S.guide && S.guide.rel === rel && !btn.disabled);
   }
   // Tips om vilken pil man ska trycka på
   const hintOn = S.phase === 'play' && S.run === null && !S.hidden && !!S.guide?.text;
@@ -1531,7 +1534,25 @@ function unhide() {
   refreshControls();
 }
 
+/** Vänd mitt under en löpning och spring tillbaka till korsningen man kom från. Ger inget felval. */
+function reverseRun() {
+  const run = S.run;
+  if (!run || run.reversed) return;
+  const back = [hero.position.clone()];
+  for (let i = run.seg; i >= 0; i--) {
+    const p = run.pts[i];
+    if (back[back.length - 1].distanceTo(p) > 0.001) back.push(p.clone());
+  }
+  if (back.length < 2) return;
+  S.run = { pts: back, seg: 0, t: 0, to: { ...S.node }, heading: OPPOSITE[run.dir], wrong: false, dir: OPPOSITE[run.dir], reversed: true };
+  S.uturn = true;
+  S.anim.reaction = null;
+  audio.play('go');
+  refreshControls();
+}
+
 function choose(rel) {
+  if (S.phase === 'play' && S.run && rel === 'back' && !S.hidden && !S.paused && !S.peek) { reverseRun(); return; }
   if (S.phase !== 'play' || S.run || S.hidden || S.paused) return;
   if (S.guide?.only && S.guide.rel !== rel) return;
   const rels = availableRel();
