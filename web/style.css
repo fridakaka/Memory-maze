@@ -379,3 +379,41 @@ textarea#fb-text { width: 100%; font: inherit; font-size: 17px; padding: 12px; b
 #levelcard #lc-note { font-size: 13px; font-weight: 700; color: #2c5a28; }
 #levelcard.out { opacity: 0; transition: opacity .5s ease-in; }
 @keyframes cardIn { from { opacity: 0; transform: translateX(-50%) translateY(-14px); } to { opacity: 1; transform: translateX(-50%); } }
+
+/* Dialog med inmatning */
+#dialog-input { width: 100%; font: inherit; font-size: 20px; font-weight: 800; text-align: center; padding: 12px; border: 3px solid var(--soft); border-radius: 14px; margin: 4px 0 12px; background: #fff; color: var(--ink); user-select: text; -webkit-user-select: text; }
+
+/* Butik */
+#sheet-shop { position: fixed; inset: 0; z-index: 7; display: flex; flex-direction: column; pointer-events: none; }
+#sheet-shop > * { pointer-events: auto; }
+#shop-head { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 8px; }
+#shop-head .round { position: static; width: 48px; height: 48px; font-size: 22px; flex: none; }
+.shop-title { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-shadow: 0 1px 0 rgba(255,255,255,.7); }
+.shop-title b { font-size: 22px; font-weight: 900; }
+#shop-gems { background: #fff; border-radius: 16px; padding: 8px 14px; font-size: 20px; font-weight: 900; box-shadow: 0 3px 0 rgba(0,0,0,.2); }
+#shop-panel { margin-top: auto; height: 58%; background: linear-gradient(#fff7e6, #f5ead2); border-radius: 26px 26px 0 0; padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 12px); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -4px 14px rgba(0,0,0,.25); }
+#shop-tabs { display: flex; gap: 6px; overflow-x: auto; flex: none; padding-bottom: 2px; }
+#shop-tabs button { flex: none; padding: 8px 12px; border-radius: 14px; font-size: 15px; font-weight: 800; background: #fff; box-shadow: 0 2px 0 var(--soft); white-space: nowrap; }
+#shop-tabs button.on { background: var(--accent); color: #fff; box-shadow: 0 2px 0 #2c5a28; }
+#shop-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-content: start; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.shop-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; background: #fff; border-radius: 16px; box-shadow: 0 3px 0 var(--soft); font-size: 13px; font-weight: 800; position: relative; }
+.shop-item .em { font-size: 34px; line-height: 1.1; }
+.shop-item small { font-size: 12px; font-weight: 800; color: #6b5a2a; }
+.shop-item.on { outline: 4px solid #ffd23f; }
+.shop-item.owned small { color: #2c5a28; }
+.shop-item.poor { opacity: .6; }
+#shop-buygems { background: #e4f4ff; flex: none; font-weight: 900; }
+.gem-pack { display: flex; justify-content: space-between; align-items: center; background: #e4f4ff; margin: 6px 0; padding: 14px 16px; border-radius: 16px; font-size: 18px; font-weight: 900; width: 100%; }
+#hero-shop, #hero-rename { background: #f7e1b8; }
+#res-shop { background: #e4f4ff; }
+
+#hero-name { display: block; font-size: 10px; font-weight: 900; line-height: 1; margin-top: -4px; max-width: 56px; overflow: hidden; text-overflow: ellipsis; }
+#hero-btn { flex-direction: column; }
+
+/* Spelbar annons (demoläge) */
+body.demo #leave, body.demo #back-study, body.demo #compass, body.demo #skip-intro, body.demo #menu { display: none !important; }
+#demo-cta { position: fixed; z-index: 4; right: max(12px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 124px); padding: 10px 16px; border-radius: 22px; background: #ff5d9e; color: #fff; font-weight: 900; font-size: 16px; box-shadow: 0 4px 0 #b02a66; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+#demo-end { z-index: 9; }
+#demo-end h1 { font-size: 34px; }
+#demo-download { background: #ff5d9e; box-shadow: 0 5px 0 #b02a66; font-size: 22px; padding: 18px; }

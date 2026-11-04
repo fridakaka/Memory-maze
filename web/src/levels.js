@@ -30,7 +30,8 @@ export async function loadLevelData() {
 export const isIntro = (id) => id > 1000 && id < 2000;
 export const isExpedition = (id) => id >= 2000 && id < 3000;
 export const isClock = (id) => id >= 3000 && id < 4000;
-export const isDisco = (id) => id >= 4000;
+export const isDisco = (id) => id >= 4000 && id < 9000;
+export const isDemo = (id) => id >= 9000;
 
 /** Nummer på introduktionsbanorna i ordning. */
 export function introIds() {

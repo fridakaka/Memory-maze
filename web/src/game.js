@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
-import { CHARACTERS, makeHero, setAccessory, setHelmet } from './heroes.js';
+import { CHARACTERS, makeHero, setAccessory, setHelmet, setWardrobe } from './heroes.js';
+import { SLOTS, ITEMS, GEM_PACKS, itemById } from './wardrobe.js';
 import { makeMonster, MONSTER_BY_THEME } from './monsters.js';
 import { THEMES, themeFor, getAssets, WEATHERS, weatherFor, getWeatherSky } from './themes.js';
 import {
@@ -7,7 +8,7 @@ import {
   timeLimit, perfectTime, starsFor, STUDY_SECONDS, RUN_SPEED,
 } from './maze.js';
 import { createAudio } from './audio.js';
-import { VERSION, FEEDBACK_URL } from './config.js';
+import { VERSION, FEEDBACK_URL, DOWNLOAD_URL } from './config.js';
 import { buildLevel, levelInfo, levelCount, introIds, expeditionIds, clockIds, discoIds, loadLevelData, isIntro } from './levels.js';
 
 // ---------- Hjälpare ----------
@@ -20,14 +21,17 @@ const lerpAngle = (a, b, t) => a + angleDiff(a, b) * t;
 const YAW = { N: Math.PI, E: Math.PI / 2, S: 0, W: -Math.PI / 2 };
 
 // ---------- Sparad progress ----------
-const SAVE_KEY = 'maze-memory-v1';
+// Demoläge: en spelbar annons med en enda bana och en knapp för att ladda ner spelet.
+const DEMO = !!window.__DEMO__ || /[?&#]demo\b/.test(window.location.search + window.location.hash);
+if (DEMO) document.body.classList.add('demo');
+const SAVE_KEY = DEMO ? 'maze-memory-demo' : 'maze-memory-v1';
 function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; }
 }
 function writeSave() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* privat läge */ }
 }
-const save = Object.assign({ stars: {}, skips: 3, chap: {}, skipped: {}, fails: {} }, loadSave());
+const save = Object.assign({ stars: {}, skips: 3, chap: {}, skipped: {}, fails: {}, gems: 30, owned: {}, wear: {}, heroName: '' }, loadSave());
 // Kikar: tre per bana, även i introduktionen. En extra kik för den som tar alla klockor.
 const PEEKS_PER_LEVEL = 3;
 
@@ -566,6 +570,18 @@ function fitMapCamera() {
 let hero = makeHero(save.hero || 'kille');
 scene.add(hero);
 
+const ITEM_MAP = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+const wearingFlags = () => ({ hat: !!save.wear?.hat, glasses: !!save.wear?.glasses, neck: !!save.wear?.neck });
+
+/** Klär på figuren: först tillbehör efter väder, sedan det man köpt i butiken. */
+function dressHero() {
+  setWardrobe(hero, {}, ITEM_MAP); // tar bort gamla färgbyten först
+  setAccessory(hero, weather.id, wearingFlags());
+  setHelmet(hero, theme.id === 'space');
+  setWardrobe(hero, save.wear ?? {}, ITEM_MAP);
+  attachFlash(weather.id === 'night');
+}
+
 function setHero(id) {
   const old = hero;
   hero = makeHero(id);
@@ -573,9 +589,7 @@ function setHero(id) {
   hero.rotation.copy(old.rotation);
   scene.remove(old);
   scene.add(hero);
-  setAccessory(hero, weather.id);
-  setHelmet(hero, theme.id === 'space');
-  attachFlash(weather.id === 'night');
+  if (S.shop) dressPreview(); else dressHero();
   save.hero = id;
   writeSave();
 }
@@ -1014,8 +1028,7 @@ function applyWeather(w) {
   if (theme.fish) { if (!fishGroup) makeFishGroup(); } else clearFish();
   if (theme.birds) { if (!birdGroup) makeBirdGroup(); } else clearBirds();
   if (theme.disco) { if (!discoGroup) makeDiscoGroup(); } else clearDisco();
-  setAccessory(hero, w.id);
-  setHelmet(hero, theme.id === 'space');
+  dressHero();
   attachFlash(w.id === 'night');
 }
 
@@ -1116,7 +1129,7 @@ function startLevel(leg = 0, carry = null) {
   S.timeLeft = carry ? carry.timeLeft : S.limit;
   S.elapsed = carry ? carry.elapsed : 0;
   S.wrongTurns = carry ? carry.wrongTurns : 0;
-  S.studyTotal = dbgStudy || L.intro?.studySeconds || STUDY_SECONDS[settings.difficulty];
+  S.studyTotal = dbgStudy || (DEMO ? 14 : 0) || L.intro?.studySeconds || STUDY_SECONDS[settings.difficulty];
   S.studyLeft = S.studyTotal;
   S.node = { ...maze.start };
   S.heading = openDirs(maze, maze.start.x, maze.start.y)[0];
@@ -1166,7 +1179,7 @@ function startLevel(leg = 0, carry = null) {
   const label = S.intro ? `Introduktion ${introIds().indexOf(level) + 1}`
     : S.exp ? `${S.exp.title} · del ${S.exp.leg + 1}/${S.exp.legs}`
       : clockIds().includes(level) ? `Klockbana ${clockIds().indexOf(level) + 1}`
-        : discoIds().includes(level) ? `Disco ×2 🪩` : `Bana ${level}`;
+        : discoIds().includes(level) ? `Disco ×2 🪩` : DEMO ? 'Prova spelet!' : `Bana ${level}`;
   S.disco = !!theme.disco;
   S.hudBase = (S.kind === 'monster' ? `${label} · Monster` : label) + wIcon;
   $('hud-level').textContent = S.hudBase;
@@ -1241,6 +1254,15 @@ function closeLevelCard() {
 }
 
 function showLevelCard(level) {
+  if (DEMO) {
+    $('lc-title').textContent = 'Prova Maze Memory!';
+    $('lc-sub').textContent = 'Titta på kartan och memorera vägen';
+    $('lc-note').textContent = 'Sedan springer gubben själv. Välj väg med pilarna!';
+    show($('levelcard'));
+    clearTimeout(levelCardTimer);
+    levelCardTimer = setTimeout(closeLevelCard, 6000);
+    return;
+  }
   const t = levelType(level);
   const chNo = chapterOf(level);
   const wIcon = weather.name ? ` · ${weather.emoji} ${weather.name}` : '';
@@ -1301,13 +1323,21 @@ function highlight(name) {
 let dialogHandlers = null;
 
 /** Visar en ruta med text och en eller två knappar. Spelet pausas medan den visas. */
-function showDialog({ title, text, primary = 'Okej', secondary = null, onPrimary = null, onSecondary = null, hi = null }) {
+function showDialog({ title, text, primary = 'Okej', secondary = null, onPrimary = null, onSecondary = null, hi = null, input = null }) {
   $('dialog-title').textContent = title ?? '';
   show($('dialog-title'), !!title);
   $('dialog-text').textContent = text;
   $('dialog-primary').textContent = primary;
   show($('dialog-secondary'), !!secondary);
   if (secondary) $('dialog-secondary').textContent = secondary;
+  const field = $('dialog-input');
+  show(field, !!input);
+  if (input) {
+    field.value = input.value ?? '';
+    field.placeholder = input.placeholder ?? '';
+    field.maxLength = input.max ?? 12;
+    field.inputMode = input.numeric ? 'numeric' : 'text';
+  }
   dialogHandlers = { onPrimary, onSecondary };
   audio.play('dialog');
   // Rutan flyttas ned om den markerade delen (kompass, backspegel) sitter uppe och annars skulle ligga över texten.
@@ -1323,7 +1353,9 @@ function closeDialog(which) {
   show($('dialog'), false);
   highlight(null);
   S.paused = false;
-  (which === 'secondary' ? h?.onSecondary : h?.onPrimary)?.();
+  const value = $('dialog-input').value;
+  show($('dialog-input'), false);
+  (which === 'secondary' ? h?.onSecondary : h?.onPrimary)?.(value);
 }
 $('dialog-primary').onclick = () => closeDialog('primary');
 $('dialog-secondary').onclick = () => closeDialog('secondary');
@@ -1433,7 +1465,7 @@ function refreshControls() {
 }
 
 // ---------- Kikar: titta på kartan medan tiden går ----------
-const peeksOn = () => S.phase === 'play';
+const peeksOn = () => S.phase === 'play' && !DEMO;
 function updatePeekBadge() {
   const badge = $('peek-count');
   show(badge, peeksOn());
@@ -2032,10 +2064,14 @@ function finish(win, reason = 'time') {
     if (S.intro) { save.intro = save.intro ?? {}; save.intro[settings.level] = true; }
   }
   let chapterMsg = '';
+  let gain = 0;
   let lost = null;
   if (win) {
     const r = registerClear(settings.level);
     if (r === 'chapter') chapterMsg = ` · Kapitel ${chapterOf(settings.level) + 1} klart! 🎉`;
+    // Diamanter: mer första gången man klarar en bana, och en bonus när ett kapitel är klart
+    gain = (firstClear ? 8 + stars * 3 : 2) + (r === 'chapter' ? 25 : 0);
+    save.gems = (save.gems ?? 0) + gain;
   } else if (!S.intro && !isSide(settings.level)) {
     save.fails = save.fails ?? {};
     save.fails[settings.level] = (save.fails[settings.level] ?? 0) + 1;
@@ -2046,16 +2082,24 @@ function finish(win, reason = 'time') {
   updateHud();
 
   setTimeout(() => {
-    $('res-title').textContent = win ? 'Du hittade ut!' : reason === 'monster' ? 'Monstret hann ikapp dig' : 'Tiden tog slut';
+    $('res-title').textContent = win ? (heroName() ? `Bra jobbat, ${heroName()}!` : 'Du hittade ut!') : reason === 'monster' ? 'Monstret hann ikapp dig' : 'Tiden tog slut';
     $('res-stars').innerHTML = (S.disco ? [0, 1, 2, 3, 4, 5] : [0, 1, 2])
       .map((i) => `<span class="${i < stars ? '' : 'off'}">★</span>`).join('');
     $('res-text').textContent = win
-      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${S.disco ? ' · dubbla poäng! 🪩' : ''}${chapterMsg || (firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : '')}`
+      ? `${used.toFixed(1)} sek · ${S.wrongTurns} felval${S.disco ? ' · dubbla poäng! 🪩' : ''} · +${gain} 💎${chapterMsg || (firstClear && !isSide(settings.level) ? ' · nästa bana är upplåst!' : '')}`
       : S.intro ? 'Försök igen. Det kostar inget liv i introduktionen.'
         : lost?.restarted ? `Slut på liv! Kapitel ${lost.c + 1} börjar om från bana ${lost.from}. Dina stjärnor och klarade banor ligger kvar.`
           : lost ? `Du har ${lost.lives} liv kvar i kapitlet.`
             : 'Försök igen. Det kostar inget liv här.';
+    if (DEMO) {
+      show($('result'), false);
+      $('demo-title').textContent = win ? 'Bra spelat! 🎉' : 'Nästan!';
+      $('demo-text').textContent = win ? 'Du hittade ut. Det finns hundratals banor, kapitel, skogar, diskon och mycket mer. Ladda ner och spela vidare!' : 'Tiden tog slut. Ladda ner spelet för fler banor, och försök igen!';
+      show($('demo-end'));
+      return;
+    }
     show($('res-next'), win);
+    show($('res-shop'), win);
     // Efter några misslyckanden kan man hoppa över banan
     const canSkip = !win && !S.intro && !isSide(settings.level) && !cleared(settings.level)
       && (save.fails?.[settings.level] ?? 0) >= 2 && !lost?.restarted;
@@ -2248,7 +2292,9 @@ function frame(now) {
     if (star) star.rotation.y += dt * 2;
   }
 
-  if (maze) {
+  if (S.shop) {
+    renderShopPreview(dt);
+  } else if (maze) {
     S.shakeBurst -= dt;
     updateFade(dt);
     updateFx(dt);
@@ -2291,7 +2337,7 @@ function cleared(id) {
 }
 
 // Kapitlen: normala banor 1–100 i grupper om fem. Expeditioner, klockbanor och introduktion hör inte till något.
-const chapterOf = (id) => (isIntro(id) || isSide(id) ? null : Math.floor((id - 1) / CHAPTER_SIZE));
+const chapterOf = (id) => (isIntro(id) || isSide(id) || id >= 9000 ? null : Math.floor((id - 1) / CHAPTER_SIZE));
 const chapterCount = () => Math.ceil(levelCount() / CHAPTER_SIZE);
 function chapterLevels(c) {
   const out = [];
@@ -2385,6 +2431,7 @@ function registerClear(id) {
 }
 
 function livesText(id) {
+  if (id >= 9000) return '';
   if (isIntro(id)) return '🎓 övning';
   if (discoIds().includes(id)) return '🪩 dubbla poäng';
   if (isSide(id)) return '⭐ bonusbana';
@@ -2516,7 +2563,9 @@ function renderMap(scroll = false) {
     // Första kapitlet har ingen egen figur, introduktionens figur hälsar där
     if (chNo !== 0) {
       const fx = Math.min(W - 80, Math.max(26, chNo === null ? p.x + roomy * 95 - 30 : p.x - roomy * 88));
-      html += `<div class="wave" style="left:${fx}px;top:${p.y - 34}px"><span class="bubble">${chNo === null ? 'Välkommen!' : CHEERS[(chNo + 1) % CHEERS.length]}</span>`
+      const nm = esc(heroName());
+      const cheers = nm ? [`Heja ${nm}!`, ...CHEERS] : CHEERS;
+      html += `<div class="wave" style="left:${fx}px;top:${p.y - 34}px"><span class="bubble">${chNo === null ? (nm ? `Välkommen, ${nm}!` : 'Välkommen!') : cheers[(chNo + 1) % cheers.length]}</span>`
         + `<span class="fig">${hero.emoji}</span><span class="hand">👋</span></div>`;
     }
     if (chNo !== null) {
@@ -2565,6 +2614,8 @@ function refreshMenu(scroll = false) {
   const info = lifeInfoFor(lifeLevel);
   $('stat-lives').textContent = chapterOf(lifeLevel) === null ? '❤ –' : `❤ ${info ? info.st.lives : CHAPTER_LIVES}`;
   $('stat-skips').textContent = `⏭ ${save.skips}`;
+  $('stat-gems').textContent = `💎 ${save.gems ?? 0}`;
+  $('hero-name').textContent = heroName();
   $('hero-emoji').textContent = heroEmoji();
   const t = levelType(settings.level);
   const th = themeFor(settings.level, t.p.themeId);
@@ -2651,6 +2702,214 @@ $('hero-grid').addEventListener('click', (e) => {
   renderHeroes();
   refreshMenu();
 });
+// ---------- Namn, diamanter och butik ----------
+const heroName = () => save.heroName || '';
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cleanName = (v) => String(v ?? '').replace(/[^\p{L}\p{N} -]/gu, '').trim().slice(0, 12);
+
+/** Fråga efter figurens namn. Namnet sparas bara i telefonen. */
+function askName(first = false) {
+  showDialog({
+    title: first ? 'Välkommen! Vad heter din figur?' : 'Byt namn',
+    text: 'Skriv ett namn (högst 12 tecken).',
+    input: { value: save.heroName ?? '', placeholder: 'Namn', max: 12 },
+    primary: 'Klart',
+    onPrimary: (v) => {
+      save.heroName = cleanName(v) || save.heroName || 'Hjälten';
+      writeSave();
+      refreshMenu();
+      if (S.shop) renderShop();
+    },
+  });
+}
+
+const previewCam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+const shopDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.06, 32), new THREE.MeshLambertMaterial({ color: 0xfff0c8 }));
+shopDisc.position.y = -0.03;
+shopDisc.visible = false;
+scene.add(shopDisc);
+
+/** Figuren utan vädertillbehör, så att man ser kläderna tydligt. */
+function dressPreview() {
+  setWardrobe(hero, {}, ITEM_MAP);
+  setAccessory(hero, 'none');
+  setHelmet(hero, false);
+  setWardrobe(hero, save.wear ?? {}, ITEM_MAP);
+}
+
+function openShop(from = 'menu') {
+  if (S.phase !== 'menu' && S.phase !== 'ended') return;
+  S.shop = true;
+  S.shopFrom = from;
+  S.shopSlot = S.shopSlot ?? 'hat';
+  S.shopMode = 'items';
+  S.shopYaw = 0.5;
+  show($('menu'), false);
+  show($('result'), false);
+  show($('sheet-hero'), false);
+  show($('sheet-shop'));
+  dressPreview();
+  renderShop();
+}
+
+function closeShop() {
+  S.shop = false;
+  show($('sheet-shop'), false);
+  shopDisc.visible = false;
+  dressHero();
+  hero.visible = S.phase === 'ended';
+  if (S.shopFrom === 'result') show($('result'));
+  else { show($('menu')); refreshMenu(); }
+}
+
+function renderShop() {
+  $('shop-name').textContent = heroName() || 'Min figur';
+  $('shop-gems').textContent = `💎 ${save.gems ?? 0}`;
+  $('shop-tabs').innerHTML = SLOTS.map((sl) =>
+    `<button data-slot="${sl.id}" class="${S.shopMode === 'items' && S.shopSlot === sl.id ? 'on' : ''}">${sl.emoji} ${sl.name}</button>`).join('');
+  if (S.shopMode === 'gems') {
+    $('shop-grid').innerHTML = '<div style="grid-column:1/-1">'
+      + '<p class="note" style="margin:0 0 6px">Testversion: ingenting debiteras på riktigt. Köp kräver en vuxen.</p>'
+      + GEM_PACKS.map((g, i) => `<button class="gem-pack" data-pack="${i}"><span>💎 ${g.gems}</span><span>${g.price}</span></button>`).join('')
+      + '</div>';
+    return;
+  }
+  const slot = S.shopSlot;
+  const worn = save.wear?.[slot] ?? null;
+  const owned = save.owned ?? {};
+  const cards = [`<button class="shop-item${worn ? '' : ' on'}" data-id=""><span class="em">🚫</span>Inget<small>&nbsp;</small></button>`];
+  for (const it of ITEMS.filter((i) => i.slot === slot)) {
+    const have = !!owned[it.id];
+    const on = worn === it.id;
+    const poor = !have && (save.gems ?? 0) < it.price;
+    cards.push(`<button class="shop-item${on ? ' on' : ''}${have ? ' owned' : ''}${poor ? ' poor' : ''}" data-id="${it.id}">`
+      + `<span class="em">${it.emoji}</span>${it.name}<small>${on ? 'På ✓' : have ? 'Ta på' : `${it.price} 💎`}</small></button>`);
+  }
+  $('shop-grid').innerHTML = cards.join('');
+}
+
+$('shop-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  S.shopSlot = b.dataset.slot;
+  S.shopMode = 'items';
+  renderShop();
+});
+
+$('shop-grid').addEventListener('click', (e) => {
+  const pack = e.target.closest('.gem-pack');
+  if (pack) { buyGems(GEM_PACKS[Number(pack.dataset.pack)]); return; }
+  const card = e.target.closest('.shop-item');
+  if (!card) return;
+  const slot = S.shopSlot;
+  save.wear = save.wear ?? {};
+  save.owned = save.owned ?? {};
+  const id = card.dataset.id;
+  const apply = () => { writeSave(); dressPreview(); renderShop(); };
+  if (!id) { delete save.wear[slot]; apply(); return; }
+  const it = itemById(id);
+  if (save.owned[id]) {
+    if (save.wear[slot] === id) delete save.wear[slot]; else save.wear[slot] = id;
+    apply();
+    return;
+  }
+  if ((save.gems ?? 0) < it.price) {
+    showDialog({ title: 'För få diamanter', text: `${it.name} kostar ${it.price} 💎 och du har ${save.gems ?? 0}. Vinn banor för att tjäna fler, eller köp diamanter.`, primary: 'Okej' });
+    return;
+  }
+  showDialog({
+    title: `Köpa ${it.name}?`,
+    text: `Det kostar ${it.price} 💎. Du har ${save.gems ?? 0}.`,
+    primary: 'Köp',
+    secondary: 'Avbryt',
+    onPrimary: () => {
+      save.gems -= it.price;
+      save.owned[id] = true;
+      save.wear[slot] = id;
+      audio.play('clock');
+      apply();
+    },
+  });
+});
+
+/** Köp diamanter: en vuxen måste svara på en räknefråga först. Testversion: ingen riktig betalning. */
+function buyGems(pack) {
+  const a = 3 + Math.floor(Math.random() * 7);
+  const b = 3 + Math.floor(Math.random() * 7);
+  showDialog({
+    title: 'Fråga en vuxen',
+    text: `Det här kostar riktiga pengar. Vad är ${a} × ${b}?`,
+    input: { value: '', placeholder: 'Svar', max: 3, numeric: true },
+    primary: 'Fortsätt',
+    secondary: 'Avbryt',
+    onPrimary: (v) => {
+      if (Number(v) !== a * b) { showDialog({ title: 'Fel svar', text: 'Be en vuxen om hjälp.', primary: 'Okej' }); return; }
+      showDialog({
+        title: `Köp ${pack.gems} 💎 för ${pack.price}?`,
+        text: 'Testversion: ingenting debiteras. Du får diamanterna gratis.',
+        primary: 'Köp',
+        secondary: 'Avbryt',
+        onPrimary: () => { save.gems = (save.gems ?? 0) + pack.gems; writeSave(); audio.play('clock'); renderShop(); refreshMenu(); },
+      });
+    },
+  });
+}
+
+/** Öppnar sidan där spelet kan laddas ner (eller anropar annonsnätverkets mraid.open om det finns). */
+function openStore() {
+  const url = DOWNLOAD_URL || `${window.location.origin}${window.location.pathname}`;
+  if (window.mraid && typeof window.mraid.open === 'function') window.mraid.open(url);
+  else window.open(url, '_blank');
+}
+function startDemo() {
+  if (!DEMO) return;
+  settings.mode = 'memory';
+  settings.level = 9001;
+  show($('demo-end'), false);
+  startLevel();
+  show($('demo-cta'));
+  show($('back-study'), false);
+}
+$('demo-cta').onclick = openStore;
+$('demo-download').onclick = openStore;
+$('demo-again').onclick = startDemo;
+$('shop-buygems').onclick = () => { S.shopMode = 'gems'; renderShop(); };
+$('shop-back').onclick = closeShop;
+$('shop-rename').onclick = () => askName(false);
+$('shop-btn').onclick = () => openShop('menu');
+$('res-shop').onclick = () => openShop('result');
+$('hero-shop').onclick = () => openShop('menu');
+$('hero-rename').onclick = () => { show($('sheet-hero'), false); askName(false); };
+
+/** Ritar figuren i butiken i spelets 3D-vy (överst på skärmen, varorna ligger nedanför). */
+function renderShopPreview(dt) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const saved = { pos: hero.position.clone(), rot: hero.rotation.clone(), vis: hero.visible, bg: scene.background, fog: scene.fog, maze: mazeGroup ? mazeGroup.visible : null };
+  S.shopYaw += dt * 0.7;
+  S.yaw = S.shopYaw;
+  animateHero(dt);
+  hero.position.set(0, 0, 0);
+  hero.visible = true;
+  shopDisc.visible = true;
+  if (mazeGroup) mazeGroup.visible = false;
+  scene.background = new THREE.Color(0xbfe6ff);
+  scene.fog = null;
+  previewCam.aspect = w / h;
+  previewCam.position.set(0, 0.62, 6.4);
+  previewCam.lookAt(0, 0.42, 0);
+  previewCam.setViewOffset(w, h, 0, h * (w / h > 0.8 ? 0.1 : 0.23), w, h);
+  renderer.render(scene, previewCam);
+  previewCam.clearViewOffset();
+  hero.position.copy(saved.pos);
+  hero.rotation.copy(saved.rot);
+  hero.visible = saved.vis;
+  shopDisc.visible = false;
+  scene.background = saved.bg;
+  scene.fog = saved.fog;
+  if (mazeGroup && saved.maze !== null) mazeGroup.visible = saved.maze;
+}
+
 $('hero-btn').onclick = () => { renderHeroes(); show($('sheet-hero')); };
 $('hero-close').onclick = () => show($('sheet-hero'), false);
 $('settings-btn').onclick = () => show($('sheet-settings'));
@@ -2910,7 +3169,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Test- och felsökningskrok
-window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, unlocked, frontier, cleared, chapter, skipLevel, finish, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; }, get birds() { return birdGroup; } };
+window.__game = { S, setMonster, get monster() { return monster; }, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, walls: walls.length, geometries: renderer.info.memory.geometries }), get weather() { return weather; }, applyWeather, setHero, get hero() { return hero; }, refreshControls, settings, save, audio, openShop, closeShop, askName, unlocked, frontier, cleared, chapter, skipLevel, finish, startLevel, beginPlay, openPeek, closePeek, choose, hide, unhide, get maze() { return maze; }, get birds() { return birdGroup; } };
 
 resize();
 // Nya spelare börjar med första introduktionsbanan. Banorna läses från levels.json.
@@ -2944,6 +3203,8 @@ requestAnimationFrame(frame);
     if (pct >= 1) {
       splash.classList.add('done');
       setTimeout(() => splash.remove(), 600);
+      setTimeout(() => { if (!save.heroName && S.phase === 'menu' && !DEMO) askName(true); }, 900);
+      if (DEMO) setTimeout(startDemo, 500);
     } else {
       requestAnimationFrame(tick);
     }

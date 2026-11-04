@@ -234,7 +234,7 @@ export function makeHero(id) {
  * Tillbehör efter väder. Alla syns bakifrån. Tidigare tillbehör tas bort först.
  * weather: 'none' | 'sun' | 'rain' | 'snow' | 'fog' | 'wind'
  */
-export function setAccessory(hero, weather) {
+export function setAccessory(hero, weather, wearing = {}) {
   const ud = hero.userData;
   ud.undo?.forEach((f) => f());
   ud.undo = [];
@@ -265,14 +265,14 @@ export function setAccessory(hero, weather) {
       glass.add(at(sph(0.012, lam(0xffffff), 1, 1, 1), eyeX * side + 0.02, eyeY + 0.025, eyeZ + 0.092));
     }
     glass.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), black), 0, eyeY + 0.01, eyeZ + 0.085));
-    add(head, glass);
+    if (!wearing.glasses) add(head, glass);
     // Solhatt av halm
     const hat = new THREE.Group();
     hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 24), lam(0xe8c96a)), 0, 0.2, 0));
     hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.13, 20), lam(0xe8c96a)), 0, 0.26, 0));
     hat.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.195, 0.195, 0.035, 20), lam(0xe63946)), 0, 0.22, 0));
     hat.rotation.x = -0.12;
-    add(head, hat);
+    if (!wearing.hat) add(head, hat);
   } else if (weather === 'rain') {
     // Gul regnrock med huva, röda stövlar och ett paraply vid sidan.
     const yellow = 0xffc92e;
@@ -281,7 +281,7 @@ export function setAccessory(hero, weather) {
     for (const leg of legs) recolor(leg, 0xd9363e);
     const hood = dome(0.268, Math.PI * 0.62, yellow);
     hood.rotation.x = -0.28;
-    add(head, hood);
+    if (!wearing.hat) add(head, hood);
     // Paraply över huvudet: skaftet i handen, kupolen ovanför huvudet.
     const um = new THREE.Group();
     um.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.8, 8), lam(0x444444)), 0, 0.98, 0));
@@ -309,12 +309,14 @@ export function setAccessory(hero, weather) {
     beanie.add(band);
     beanie.add(at(sph(0.058, lam(0xffffff)), 0, 0.27, 0));
     beanie.rotation.x = -0.1;
-    add(head, beanie);
+    if (!wearing.hat) add(head, beanie);
     const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.05, 10, 24), lam(0xe63946));
     scarf.position.y = 0.5;
     scarf.rotation.x = Math.PI / 2;
-    add(hero, scarf);
-    add(hero, at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.035), lam(0xe63946)), 0.07, 0.38, -0.15));
+    if (!wearing.neck) {
+      add(hero, scarf);
+      add(hero, at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.035), lam(0xe63946)), 0.07, 0.38, -0.15));
+    }
   } else if (weather === 'night') {
     // Ficklampa i handen. Strålen och ljuset sitter på figuren (se game.js).
     const torch = new THREE.Group();
@@ -337,11 +339,11 @@ export function setAccessory(hero, weather) {
     cap.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.14), lam(0x2fa84f)), 0, 0.06, 0.26));
     cap.add(at(sph(0.025, lam(0xffffff)), 0, 0.26, 0));
     cap.rotation.x = -0.12;
-    add(head, cap);
+    if (!wearing.hat) add(head, cap);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.045, 10, 24), lam(0xffd23f));
     ring.position.y = 0.5;
     ring.rotation.x = Math.PI / 2;
-    add(hero, ring);
+    if (!wearing.neck) add(hero, ring);
     // Halsduksflik som fladdrar bakom
     const tail = new THREE.Group();
     tail.position.set(0.05, 0.48, -0.14);
@@ -351,8 +353,250 @@ export function setAccessory(hero, weather) {
       tail.add(seg);
       ud.flutter.push({ mesh: seg, i });
     }
-    add(hero, tail);
+    if (!wearing.neck) add(hero, tail);
+    else ud.flutter = [];
   }
+}
+
+/** Kläder och tillbehör från butiken. wear = { hat, glasses, neck, back, outfit, shoes } med varornas id. */
+export function setWardrobe(hero, wear = {}, items = {}) {
+  const ud = hero.userData;
+  ud.undoWear?.forEach((f) => f());
+  ud.undoWear = [];
+  const { head, body, arms, legs, face } = ud;
+  const add = (parent, obj) => {
+    parent.add(obj);
+    obj.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+    ud.undoWear.push(() => parent.remove(obj));
+    return obj;
+  };
+  const recolor = (mesh, color) => {
+    const old = mesh.material.color.getHex();
+    mesh.material.color.setHex(color);
+    ud.undoWear.push(() => mesh.material.color.setHex(old));
+  };
+  const lam = (c, e = 0x000000) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+  const dome = (r, theta, color) => new THREE.Mesh(new THREE.SphereGeometry(r, 22, 14, 0, TAU, 0, theta), lam(color));
+  const cyl = (rt, rb, h, color, seg = 20) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), lam(color));
+  const star = (R, color) => {
+    const shape = new THREE.Shape();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? R * 0.45 : R;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      if (i === 0) shape.moveTo(r * Math.cos(a), r * Math.sin(a));
+      else shape.lineTo(r * Math.cos(a), r * Math.sin(a));
+    }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.02, bevelEnabled: false });
+    return new THREE.Mesh(geo, lam(color));
+  };
+  const { eyeX, eyeY, eyeZ } = face.params;
+  const itemOf = (slot) => items[wear[slot]] ?? null;
+
+  // ---- Hattar (sitter på huvudet) ----
+  switch (wear.hat) {
+    case 'cap': {
+      const g = new THREE.Group();
+      g.add(dome(0.258, Math.PI * 0.45, 0xe63946));
+      g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.14), lam(0xe63946)), 0, 0.06, 0.26));
+      g.add(at(sph(0.025, lam(0xffffff)), 0, 0.26, 0));
+      g.rotation.x = -0.12;
+      add(head, g);
+      break;
+    }
+    case 'tophat': {
+      const g = new THREE.Group();
+      g.add(at(cyl(0.3, 0.3, 0.02, 0x1d1d24, 26), 0, 0.2, 0));
+      g.add(at(cyl(0.16, 0.16, 0.28, 0x1d1d24), 0, 0.34, 0));
+      g.add(at(cyl(0.165, 0.165, 0.05, 0xe63946), 0, 0.25, 0));
+      g.rotation.x = -0.08;
+      add(head, g);
+      break;
+    }
+    case 'crown': {
+      const g = new THREE.Group();
+      g.add(at(cyl(0.19, 0.19, 0.07, 0xffc83d, 24), 0, 0.22, 0));
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU;
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), lam(0xffc83d));
+        tip.position.set(Math.cos(a) * 0.15, 0.31, Math.sin(a) * 0.15);
+        g.add(tip);
+        g.add(at(sph(0.022, lam(i % 2 ? 0xe63946 : 0x3fa5ff)), Math.cos(a) * 0.15, 0.375, Math.sin(a) * 0.15));
+      }
+      add(head, g);
+      break;
+    }
+    case 'flower': {
+      const g = new THREE.Group();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU;
+        g.add(at(sph(0.045, lam(0xff8fb0)), Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0));
+      }
+      g.add(at(sph(0.04, lam(0xffe066)), 0, 0, 0.02));
+      g.position.set(0.13, 0.2, 0.13);
+      g.rotation.set(-0.5, 0.4, 0);
+      add(head, g);
+      break;
+    }
+    case 'bow': {
+      const g = new THREE.Group();
+      const pink = lam(0xff5d9e);
+      g.add(at(sph(0.07, pink, 1.5, 1, 0.8), -0.08, 0, 0));
+      g.add(at(sph(0.07, pink, 1.5, 1, 0.8), 0.08, 0, 0));
+      g.add(at(sph(0.04, lam(0xe63972)), 0, 0, 0.01));
+      g.position.set(0, 0.26, 0.04);
+      add(head, g);
+      break;
+    }
+    case 'headphones': {
+      const g = new THREE.Group();
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.022, 8, 28, Math.PI), lam(0x2b2f3a));
+      g.add(band);
+      for (const side of [-1, 1]) {
+        const cup = cyl(0.08, 0.08, 0.055, 0xff5d9e);
+        cup.rotation.z = Math.PI / 2;
+        cup.position.set(0.27 * side, 0, 0);
+        g.add(cup);
+      }
+      add(head, g);
+      break;
+    }
+    case 'cowboy': {
+      const g = new THREE.Group();
+      g.add(at(cyl(0.36, 0.36, 0.02, 0xa6743c, 28), 0, 0.2, 0));
+      g.add(at(cyl(0.17, 0.2, 0.17, 0xa6743c), 0, 0.29, 0));
+      g.add(at(cyl(0.205, 0.205, 0.035, 0x5a3b24), 0, 0.23, 0));
+      g.rotation.x = -0.1;
+      add(head, g);
+      break;
+    }
+    case 'wizard': {
+      const g = new THREE.Group();
+      g.add(at(cyl(0.3, 0.3, 0.02, 0x4b2a8f, 26), 0, 0.2, 0));
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.46, 20), lam(0x6a3bc0));
+      cone.position.y = 0.44;
+      cone.rotation.z = 0.12;
+      g.add(cone);
+      g.add(at(sph(0.03, lam(0xffe066, 0x806000)), 0.1, 0.4, 0.17));
+      g.add(at(sph(0.022, lam(0xffe066, 0x806000)), -0.08, 0.5, 0.14));
+      add(head, g);
+      break;
+    }
+    default:
+  }
+
+  // ---- Glasögon ----
+  switch (wear.glasses) {
+    case 'sunglasses': {
+      const g = new THREE.Group();
+      const black = lam(0x15151a);
+      for (const side of [-1, 1]) {
+        g.add(at(sph(0.07, black, 1, 0.85, 0.45), eyeX * side, eyeY, eyeZ + 0.05));
+        g.add(at(sph(0.012, lam(0xffffff)), eyeX * side + 0.02, eyeY + 0.025, eyeZ + 0.092));
+      }
+      g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), black), 0, eyeY + 0.01, eyeZ + 0.085));
+      add(head, g);
+      break;
+    }
+    case 'round': {
+      const g = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.009, 8, 22), lam(0x2b2f3a));
+        rim.position.set(eyeX * side, eyeY, eyeZ + 0.07);
+        g.add(rim);
+      }
+      g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.01), lam(0x2b2f3a)), 0, eyeY + 0.01, eyeZ + 0.07));
+      add(head, g);
+      break;
+    }
+    case 'hearts': {
+      const g = new THREE.Group();
+      const pink = lam(0xff4f86);
+      for (const side of [-1, 1]) {
+        g.add(at(sph(0.04, pink, 1, 1, 0.5), eyeX * side - 0.025, eyeY + 0.02, eyeZ + 0.07));
+        g.add(at(sph(0.04, pink, 1, 1, 0.5), eyeX * side + 0.025, eyeY + 0.02, eyeZ + 0.07));
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.058, 0.07, 4), pink);
+        tip.rotation.set(Math.PI, 0, Math.PI / 4);
+        tip.position.set(eyeX * side, eyeY - 0.02, eyeZ + 0.07);
+        tip.scale.z = 0.45;
+        g.add(tip);
+      }
+      g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 0.01), lam(0xff4f86)), 0, eyeY + 0.01, eyeZ + 0.07));
+      add(head, g);
+      break;
+    }
+    case 'stars': {
+      const g = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const st = star(0.085, 0xffd23f);
+        st.position.set(eyeX * side, eyeY, eyeZ + 0.06);
+        g.add(st);
+      }
+      g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 0.01), lam(0xffd23f)), 0, eyeY + 0.01, eyeZ + 0.07));
+      add(head, g);
+      break;
+    }
+    default:
+  }
+
+  // ---- Halsduk eller fluga ----
+  const neck = itemOf('neck');
+  if (wear.neck === 'bowtie') {
+    const g = new THREE.Group();
+    const red = lam(0xe63946);
+    for (const side of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.11, 10), red);
+      wing.rotation.z = -side * Math.PI / 2;
+      wing.position.x = side * 0.06;
+      g.add(wing);
+    }
+    g.add(at(sph(0.03, lam(0xb02a35)), 0, 0, 0.01));
+    g.position.set(0, 0.5, 0.17);
+    add(hero, g);
+  } else if (neck) {
+    const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.05, 10, 24), lam(neck.color));
+    scarf.position.y = 0.5;
+    scarf.rotation.x = Math.PI / 2;
+    add(hero, scarf);
+    add(hero, at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.035), lam(neck.color)), 0.07, 0.38, -0.15));
+  }
+
+  // ---- Rygg ----
+  const back = itemOf('back');
+  if (wear.back === 'backpack') {
+    const g = new THREE.Group();
+    g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.34, 0.12), lam(0x9a5bd6)), 0, 0.3, -0.27));
+    g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.06), lam(0x7a3fb8)), 0, 0.24, -0.35));
+    add(hero, g);
+  } else if (wear.back === 'wings') {
+    const white = lam(0xffffff, 0x222222);
+    for (const side of [-1, 1]) {
+      const wing = sph(0.14, white, 0.35, 1.5, 0.9);
+      wing.position.set(0.15 * side, 0.4, -0.2);
+      wing.rotation.z = side * -0.5;
+      add(hero, wing);
+      const tip = sph(0.09, white, 0.35, 1.3, 0.8);
+      tip.position.set(0.22 * side, 0.55, -0.22);
+      tip.rotation.z = side * -0.7;
+      add(hero, tip);
+    }
+  } else if (back) {
+    // Mantel: en lätt utsvängd tygbit bakom ryggen
+    const cape = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.52, 0.025), lam(back.color));
+    cape.geometry.translate(0, -0.26, 0);
+    cape.position.set(0, 0.5, -0.2);
+    cape.rotation.x = 0.12;
+    add(hero, cape);
+    add(hero, at(cyl(0.02, 0.02, 0.3, 0xffd23f, 8), 0, 0.5, -0.17));
+  }
+
+  // ---- Kläder och skor (färgbyten) ----
+  const outfit = itemOf('outfit');
+  if (outfit) {
+    recolor(body, outfit.color);
+    for (const arm of arms) recolor(arm.children[0], outfit.color);
+  }
+  const shoes = itemOf('shoes');
+  if (shoes) for (const leg of legs) recolor(leg, shoes.color);
 }
 
 /** Rymdhjälm med glas, krage, antenn och syretank. Sätts på i rymdstationen. */

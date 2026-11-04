@@ -68,6 +68,7 @@
   <div id="levelcard" class="hidden"><b id="lc-title"></b><span id="lc-sub"></span><span id="lc-note"></span></div>
   <div id="hint" class="hidden"></div>
   <div id="pop"></div>
+  <button id="demo-cta" class="hidden">📲 Ladda ner</button>
   <button id="ready" class="hidden">Jag är redo</button>
   <button id="back-study" class="round hidden" aria-label="Tillbaka till menyn">←</button>
   <button id="peek-close" class="hidden">Stäng kartan</button>
@@ -87,10 +88,10 @@
   <!-- Meny: bankarta -->
   <div id="menu" class="menu">
     <div class="menu-top">
-      <button id="hero-btn" class="round" aria-label="Välj figur"><span id="hero-emoji">👦</span></button>
+      <button id="hero-btn" class="round" aria-label="Välj figur"><span id="hero-emoji">👦</span><small id="hero-name"></small></button>
       <div class="menu-title">
         <h1>Maze Memory</h1>
-        <div class="menu-stats"><span id="stat-stars">★ 0</span><span id="stat-lives">❤ 3</span><span id="stat-skips">⏭ 3</span></div>
+        <div class="menu-stats"><span id="stat-stars">★ 0</span><span id="stat-lives">❤ 3</span><span id="stat-skips">⏭ 3</span><span id="stat-gems">💎 30</span></div>
       </div>
       <button id="settings-btn" class="round" aria-label="Inställningar">⚙</button>
     </div>
@@ -99,7 +100,7 @@
 
     <div class="menu-bottom">
       <div id="lvl-info" class="info"></div>
-      <div class="menu-foot"><span id="version"></span><button id="feedback-btn" class="linkish">💬 Tyck till</button></div>
+      <div class="menu-foot"><span id="version"></span><button id="shop-btn" class="linkish">👕 Butik</button><button id="feedback-btn" class="linkish">💬 Tyck till</button></div>
       <button id="skip-intro" class="hidden">Hoppa över introduktionen</button>
       <button id="play" class="primary">Spela</button>
     </div>
@@ -175,7 +176,23 @@
     <h1>Välj figur</h1>
     <p id="hero-stars" class="tag"></p>
     <div id="hero-grid" class="hero-grid"></div>
+    <button id="hero-shop">👕 Butiken: kläder och tillbehör</button>
+    <button id="hero-rename">✏️ Byt namn</button>
     <button id="hero-close" class="primary">Klar</button>
+  </div>
+
+  <!-- Butik: figuren syns överst (ritas i spelets 3D-vy), varorna nedanför -->
+  <div id="sheet-shop" class="hidden">
+    <div id="shop-head">
+      <button id="shop-back" class="round" aria-label="Tillbaka">←</button>
+      <div class="shop-title"><b id="shop-name"></b><button id="shop-rename" class="linkish">✏️ Byt namn</button></div>
+      <div id="shop-gems">💎 0</div>
+    </div>
+    <div id="shop-panel">
+      <div id="shop-tabs"></div>
+      <div id="shop-grid"></div>
+      <button id="shop-buygems">💎 Köp diamanter</button>
+    </div>
   </div>
 
   <!-- Förklaringar och frågor -->
@@ -183,11 +200,20 @@
     <div class="dialog-card">
       <h2 id="dialog-title"></h2>
       <p id="dialog-text"></p>
+      <input id="dialog-input" class="hidden" autocomplete="off" autocapitalize="words" maxlength="12">
       <div class="dialog-buttons">
         <button id="dialog-secondary" class="hidden"></button>
         <button id="dialog-primary" class="primary">Okej</button>
       </div>
     </div>
+  </div>
+
+  <!-- Spelbar annons: slutkort -->
+  <div id="demo-end" class="panel hidden">
+    <h1 id="demo-title"></h1>
+    <p id="demo-text"></p>
+    <button id="demo-download" class="primary">📲 Ladda ner Maze Memory</button>
+    <button id="demo-again">Spela igen</button>
   </div>
 
   <!-- Resultat -->
@@ -196,6 +222,7 @@
     <div id="res-stars" class="stars big"></div>
     <p id="res-text"></p>
     <button id="res-next" class="primary">Nästa bana</button>
+    <button id="res-shop" class="hidden">👕 Butiken</button>
     <button id="res-skip" class="hidden">Hoppa över banan</button>
     <button id="res-again">Spela om</button>
     <button id="res-menu">Meny</button>

@@ -277,6 +277,30 @@ for (const dl of DISCO_LEVELS) {
   });
 }
 
+// ---- Demobana till den spelbara annonsen ----
+{
+  let chosen = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && !chosen; attempt++) {
+    const seed = 90011 + attempt * 100003;
+    const maze = generateMaze({ width: 8, height: 9, loops: 3 + Math.floor(attempt / 4), seed });
+    const landmarks = pickLandmarks(maze, 0.4, seed, []);
+    const result = analyzeLevel(maze, { mode: 'time', d: 0.4 });
+    if (wallFollowSolves(maze)) result.problems.push('Håll höger eller vänster räcker');
+    if (maze.solution.length - 1 < 16) result.problems.push('För kort väg');
+    if (maze.solution.length - 1 > 30) result.problems.push('För lång väg för en annons');
+    if (new Set(landmarks.map((l) => l.type)).size !== landmarks.length) result.problems.push('Samma landmärke två gånger');
+    if (!result.problems.length) chosen = { maze, landmarks, result };
+  }
+  if (!chosen) failures.push('Demobanan gick inte att bygga');
+  else {
+    const { maze, landmarks, result } = chosen;
+    entries.push({
+      id: 9001, ...encodeMaze(maze), mode: 'time', d: 0.4, theme: 'forest', weather: 'sun', spots: [], landmarks,
+      plan: { timeLimit: 90 }, demo: true, rating: result.rating, label: result.label, metrics: result.metrics,
+    });
+  }
+}
+
 // ---- Skriv resultatet ----
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'levels.json'), JSON.stringify({ version: 1, levels: entries }));
