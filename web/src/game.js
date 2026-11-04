@@ -1174,6 +1174,7 @@ function startLevel(leg = 0, carry = null) {
   const study = S.modeNow === 'memory' ? 'Memorera vägen' : 'Hitta och memorera vägen';
   $('hud-phase').textContent = (S.kind === 'monster' ? `${study} – tunnor är gömställen` : study) + ' · nyp = zooma, dra = vicka';
   updateHud();
+  showLevelCard(level);
   coach('study');
   if (S.clockTotal && !save.seenClock) {
     save.seenClock = true;
@@ -1187,6 +1188,7 @@ function startLevel(leg = 0, carry = null) {
 }
 
 function beginPlay() {
+  closeLevelCard();
   S.phase = 'play';
   audio.play('start');
   audio.setMusic(theme.disco ? 'disco' : 'play');
@@ -1230,6 +1232,48 @@ function availableRel() {
   for (const d of openDirs(maze, S.node.x, S.node.y)) rels[relativeDir(S.heading, d)] = d;
   return rels;
 }
+
+// ---------- Banakort: kort information i början av varje bana ----------
+let levelCardTimer = null;
+function closeLevelCard() {
+  clearTimeout(levelCardTimer);
+  show($('levelcard'), false);
+}
+
+function showLevelCard(level) {
+  const t = levelType(level);
+  const chNo = chapterOf(level);
+  const wIcon = weather.name ? ` · ${weather.emoji} ${weather.name}` : '';
+  let title;
+  if (S.intro) title = 'Introduktion';
+  else if (S.exp) title = `${S.exp.title} · del ${S.exp.leg + 1} av ${S.exp.legs}`;
+  else if (clockIds().includes(level)) title = `Klockbana ${clockIds().indexOf(level) + 1}`;
+  else if (discoIds().includes(level)) title = `Discobana ${discoIds().indexOf(level) + 1}`;
+  else title = `${chNo === null ? '' : `Kapitel ${chNo + 1} · `}Bana ${level}`;
+  const notes = [];
+  if (!S.intro && !S.exp && !isSide(level)) notes.push(`Svårighet: ${t.label}`);
+  if (S.exp) notes.push(S.exp.leg === 0 ? `${S.exp.legs} delar med checkpoints` : 'Tiden och felvalen följer med');
+  if (S.clockTotal) notes.push('Kort tid – plocka ⏰ i sidogångarna');
+  if (S.disco) notes.push('Dubbla poäng! 🪩');
+  if (S.kind === 'monster') notes.push('Ett monster jagar. Göm dig i tunnorna');
+  if (S.kind === 'free') notes.push('Ingen tidsgräns');
+  const info = lifeInfoFor(level);
+  if (info) notes.push(`${'❤'.repeat(info.st.lives)}${'♡'.repeat(CHAPTER_LIVES - info.st.lives)} liv i kapitlet`);
+  else if (chNo !== null) notes.push('Övning: kostar inget liv');
+  notes.push(S.modeNow === 'memory' ? 'Den rosa linjen visar vägen' : 'Hitta vägen själv');
+  $('lc-title').textContent = title;
+  $('lc-sub').textContent = `${theme.name}${wIcon} · ${maze.width}×${maze.height} rutor`;
+  $('lc-note').textContent = notes.join(' · ');
+  const card = $('levelcard');
+  card.classList.remove('out');
+  show(card);
+  clearTimeout(levelCardTimer);
+  levelCardTimer = setTimeout(() => {
+    card.classList.add('out');
+    levelCardTimer = setTimeout(() => show(card, false), 500);
+  }, 4500);
+}
+$('levelcard').onclick = closeLevelCard;
 
 // ---------- Monster (tillval) ----------
 // Med tillvalet Monster blir en del banor monsterbanor: ett monster jagar och man kan gömma sig i tunnor.
@@ -2682,6 +2726,7 @@ $('res-next').onclick = () => {
   startLevel();
 };
 function backToMenu() {
+  closeLevelCard();
   audio.setMusic('menu');
   audio.heartbeat(0);
   S.peek = false;
